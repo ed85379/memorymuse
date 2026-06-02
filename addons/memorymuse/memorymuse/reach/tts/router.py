@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, UploadFile, File, WebSocket
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
-from app.services.tts_core import synthesize_speech, stream_speech
+from .tts_core import synthesize_speech, stream_speech
 import numpy as np
 import time
 import traceback

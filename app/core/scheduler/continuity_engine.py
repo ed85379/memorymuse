@@ -1,22 +1,42 @@
 import asyncio
 import random
-from app.core.muse_initiator import run_whispergate, run_discoveryfeeds_lookup, run_check_reminders
+import httpx
+#from app.core.muse_initiator import run_initiative, run_discoveryfeeds_lookup
+#from addons.memorymuse.memorymuse.continuity.reminders.reminders_core import run_check_reminders
 from app.core.time_location_utils import seconds_until
-from app.api.queues import run_broadcast_queue, run_log_queue, run_index_queue, run_memory_index_queue, broadcast_queue, log_queue, index_queue, index_memory_queue
-from app.interfaces.websocket_server import broadcast_message
-from app.core.memory_core import log_message
-from app.databases.memory_indexer import build_index
+from app.config import API_URL
+
+
+async def run_reminders():
+    response = httpx.post(
+        f"{API_URL}/api/continuity/scheduler/run/reminders",
+        timeout=5
+    )
+
+async def run_initiative():
+    response = httpx.post(
+        f"{API_URL}/api/continuity/scheduler/run/initiative",
+        timeout=5
+    )
+
+async def run_discoveryfeeds():
+    response = httpx.post(
+        f"{API_URL}/api/continuity/scheduler/run/discoveryfeeds",
+        timeout=5
+    )
 
 # --- Scheduled Tasks ---
 scheduled_tasks = [
-    {"name": "whispergate", "interval": 3600, "function": run_whispergate},
+    {"name": "initiative", "interval": 3600, "function": run_initiative},
 #    {"name": "check_dropped_threads", "interval": 3600, "function": muse_initiator.run_dropped_threads_check},
-    {"name": "discovery_feed", "interval": 3600, "function": run_discoveryfeeds_lookup},
-    {"name": "reminder_checker", "interval": 60, "function": run_check_reminders},
+    {"name": "discovery_feed", "interval": 3600, "function": run_discoveryfeeds},
+    {"name": "reminder_checker", "interval": 60, "function": run_reminders},
 #    {"name": "inactivity_checker", "interval": 1800, "function": muse_initiator.run_inactivity_check},
 #    {"name": "dreamtime", "interval": 86400, "function": muse_initiator.run_dream_gate},
 #    {"name": "introspection_engine", "interval": 86400, "function": muse_initiator.run_introspection_engine},
 ]
+
+
 
 # --- Individual Loop for Each Task ---
 async def task_runner(task):
@@ -53,11 +73,6 @@ async def task_runner(task):
 
 # --- Main Event Loop ---
 async def main():
-    # launch queue consumers
-    asyncio.create_task(run_log_queue(log_queue, log_message))
-    asyncio.create_task(run_index_queue(index_queue, build_index))
-    asyncio.create_task(run_broadcast_queue(broadcast_queue, broadcast_message))
-
     # launch your scheduled tasks
     await asyncio.gather(
         *(task_runner(task) for task in scheduled_tasks),

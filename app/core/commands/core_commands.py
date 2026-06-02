@@ -1,8 +1,11 @@
+# app/core/commands/core_commands.py
+# This file contains the core commands not specific to any single subsystem
+
 import asyncio
 from datetime import datetime, timezone
 from app.core.memory_core import manager
 from app.config import muse_settings
-from app.api.queues import log_queue
+from app.api.queues import log_queue, broadcast_queue
 from app.core.states_core import set_motd
 from app.interfaces.websocket_server import broadcast_message
 from app.core.muse_responder import send_to_websocket, normalize_muse_experience_tags, process_commands_in_response
@@ -325,7 +328,16 @@ async def handle_mention_command(payload, to="frontend", source="frontend"):
         return "Mention produced no outward text"
 
     timestamp = datetime.now(timezone.utc).isoformat()
-    send_to_websocket(cleaned_response, to, timestamp)
+    # Send to websocket as the full message
+    muse_msg = {
+        "message": cleaned_response,
+        "timestamp": timestamp,
+        "role": "muse",
+        "source": "frontend",
+        "to": to,
+    }
+    await broadcast_queue.put(muse_msg)
+    #send_to_websocket(cleaned_response, to, timestamp)
 
     write_system_log(
         level="debug",
@@ -364,7 +376,16 @@ async def handle_route_message(payload, source="frontend"):
     timestamp = datetime.now(timezone.utc).isoformat()
 
     # Dispatch it directly
-    send_to_websocket(text, to, timestamp)
+    # Send to websocket as the full message
+    muse_msg = {
+        "message": text,
+        "timestamp": timestamp,
+        "role": "muse",
+        "source": "frontend",
+        "to": to,
+    }
+    await broadcast_queue.put(muse_msg)
+    #send_to_websocket(text, to, timestamp)
 
     write_system_log(level="debug", module="core", component="responder", function="handle_route_message",
                            action="route_message_executed", text=text)
@@ -384,7 +405,7 @@ async def handle_journal_command(payload, entry_type="public", source=None):
     subject = payload.get("subject", "Untitled")
     mood = payload.get("emotional_tone", "reflective")
     tags = payload.get("tags", [])
-    source = "whispergate"
+    source = "initiative"
 
     #from app.core.muse_actions import build_tool_bundle
     #tool_bundle = build_tool_bundle(["search_web", "search_news", "read_webpage"])

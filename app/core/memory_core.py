@@ -738,24 +738,36 @@ def search_indexed_memory(
     return sorted_results[:top_k]
 
 def search_memory_semantic(query, project_ids=None, start_time=None, end_time=None, limit=5, public=False):
+    from datetime import datetime, time
     from zoneinfo import ZoneInfo
     from app.core.time_location_utils import _load_user_location
 
     loc = _load_user_location()
     user_tz = ZoneInfo(loc.timezone)
 
-    start_time_norm = start_time.rstrip("Z") if start_time else None
-    end_time_norm = end_time.rstrip("Z") if end_time else None
+    def normalize_time_for_qdrant(value, *, is_end=False):
+        if not value:
+            return None
 
-    local_st = datetime.strptime(start_time_norm, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=user_tz)
-    local_et = datetime.strptime(end_time_norm, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=user_tz)
+        value = value.rstrip("Z")
 
-    utc_st = local_st.astimezone(ZoneInfo("UTC"))
-    utc_et = local_et.astimezone(ZoneInfo("UTC"))
+        if len(value) == 10:
+            # Date-only input: expand to local day boundary.
+            local_date = datetime.strptime(value, "%Y-%m-%d").date()
+            local_dt = datetime.combine(
+                local_date,
+                time.max if is_end else time.min,
+                tzinfo=user_tz,
+            )
+        else:
+            # Full local datetime input.
+            local_dt = datetime.strptime(value, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=user_tz)
 
-    start_time_qdrant = utc_st.strftime("%Y-%m-%dT%H:%M:%S.%f")
-    end_time_qdrant = utc_et.strftime("%Y-%m-%dT%H:%M:%S.%f")
+        utc_dt = local_dt.astimezone(ZoneInfo("UTC"))
+        return utc_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
 
+    start_time_qdrant = normalize_time_for_qdrant(start_time, is_end=False)
+    end_time_qdrant = normalize_time_for_qdrant(end_time, is_end=True)
 
     internal_k = max(20, limit * 5)
 
@@ -763,10 +775,15 @@ def search_memory_semantic(query, project_ids=None, start_time=None, end_time=No
         "query": query,
         "top_k": internal_k,
         "public": public,
-        "start_time": start_time_qdrant,
-        "end_time": end_time_qdrant,
         "recency_half_life": 0,
     }
+
+    if start_time_qdrant:
+        kwargs["start_time"] = start_time_qdrant
+
+    if end_time_qdrant:
+        kwargs["end_time"] = end_time_qdrant
+
     if project_ids:
         kwargs["projects_in_focus"] = project_ids
         kwargs["blend_ratio"] = 1.0
@@ -783,7 +800,6 @@ def search_memory_semantic(query, project_ids=None, start_time=None, end_time=No
         doc = get_message_by_id(mid)
         if not doc:
             continue
-
 
         doc["_semantic_score"] = r.get("score")
         doc["_semantic_meta"] = r

@@ -173,7 +173,7 @@ def format_journal_entry(t):
 def is_conversation_active():
     """
     Return True if there has been frontend chat activity within the last `minutes`.
-    Used by Whispergate to decide whether 'speak' should be offered.
+    Used by Initiative to decide whether 'mention' should be offered.
     """
     collection = MONGO_CONVERSATION_COLLECTION
     docs = mongo.find_logs(

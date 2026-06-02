@@ -1,5 +1,4 @@
 # core/prompt_builder.py
-import json
 from pathlib import Path
 import base64
 import uuid
@@ -1100,7 +1099,7 @@ class PromptBuilder:
         return {"role": "system", "text": display_block}
 
     def add_intent_listener(self, command_names: list[str]):
-        from app.commands.registry import command_registry
+        from app.core.commands.registry import command_registry
 
         listener_lines = []
         listener_lines.append(
@@ -1884,13 +1883,13 @@ class PromptBuilder:
             "Do not return any natural language text. Only one valid [COMMAND: ...] block per response."
         )
 
-    def make_whispergate_json_prompt(
+    def make_initiative_json_prompt(
         self,
         allowed_actions: list[str],
         quiet_hours: bool = False,
     ) -> str:
         """
-        Generates a JSON-only Whispergate prompt for the -nano model.
+        Generates a JSON-only Initiative prompt for the -nano model.
 
         The model must return exactly one JSON object:
           - either {"should_act": false, "actions": []}
@@ -2093,7 +2092,7 @@ class PromptBuilder:
             example_actions.append(
                 """    {
           "type": "journal_public",
-          "subject": "Reflect on the shift from command blocks to JSON in Whispergate.",
+          "subject": "Reflect on the shift from command blocks to JSON in Initiative.",
           "source": "recent development work"
         }"""
             )
@@ -2112,7 +2111,7 @@ class PromptBuilder:
             example_actions.append(
                 """    {
           "type": "remember_fact",
-          "text": "Ed wants Whispergate subject-based actions to provide suggested topics, not final generated text."
+          "text": "Ed wants Initiative subject-based actions to provide suggested topics, not final generated text."
         }"""
             )
 
@@ -2127,7 +2126,7 @@ class PromptBuilder:
         actions_block = ",\n".join(example_actions)
 
         return (
-            "[Whispergate JSON Instructions]\n"
+            "[Initiative JSON Instructions]\n"
             "This is a moment of stillness. No one is talking to you directly.\n\n"
             "You are the same muse described above, but acting in a quiet, background, reflective mode.\n"
             "You may choose to act if something genuinely meaningful stirs within you.\n"

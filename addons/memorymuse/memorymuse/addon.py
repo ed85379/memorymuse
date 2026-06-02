@@ -1,6 +1,4 @@
 from .reach.tts.router import tts_router
-from .continuity.reminders.router import reminders_router
-from .continuity.reminders.commands import register_reminder_commands
 
 
 
@@ -9,11 +7,11 @@ def register(app):
     register_prompt_profiles(app)
     register_commands(app)
     register_tools(app)
+    register_scheduler_tasks()
 
 
 def register_routers(app):
     app.include_router(tts_router)
-    app.include_router(reminders_router)
 
 
 def register_prompt_profiles(app):
@@ -21,8 +19,13 @@ def register_prompt_profiles(app):
 
 
 def register_commands(app):
-    register_reminder_commands(app.state.command_registry)
+    pass
 
 
 def register_tools(app):
     pass
+
+def register_scheduler_tasks() -> None:
+    from .reach.discoveryfeeds.scheduler_tasks import register_scheduler_tasks as register_discoveryfeeds
+
+    register_discoveryfeeds()

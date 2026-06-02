@@ -13,7 +13,7 @@ from app.core.utils import (write_system_log,
 from app.core.time_location_utils import parse_iso_datetime
 from app.services.openai_client import get_openai_response
 from app.config import API_URL, muse_settings
-from app.commands.registry import command_registry
+from app.core.commands.registry import command_registry
 
 
 
@@ -87,7 +87,7 @@ def format_system_note(cmd_name: str, result: dict, schema: dict | None = None) 
             lines.append("Available related commands:")
 
             for child_name in child_cmds:
-                cmd_def = command_registry.get(child_name, {})
+                cmd_def = command_registry.get(child_name)
                 triggers = cmd_def.get("triggers")
                 fmt = cmd_def.get("format")
 
@@ -295,17 +295,21 @@ def process_commands_in_response(
     cleaned_response = "".join(cleaned_parts)
     return cleaned_response, results
 
+# This allows referencing handlers directly by name
+COMMAND_HANDLERS = {
+    name: cfg["handler"] for name, cfg in command_registry.all().items()
+}
 
 
-def process_whispergate_json_actions(
+def process_initiative_json_actions(
     raw_response: str,
     *,
     source: Optional[str] = None,
-    whispergate_data: Optional[Dict[str, Any]] = None,
+    initiative_data: Optional[Dict[str, Any]] = None,
     apply_filters: bool = True,
 ) -> List[CommandResult]:
     """
-    Process a JSON-only Whispergate response.
+    Process a JSON-only Initiative response.
 
     Expected shape:
     {
@@ -326,14 +330,14 @@ def process_whispergate_json_actions(
             level="error",
             module="core",
             component="command_core",
-            function="process_whispergate_json_actions",
+            function="process_initiative_json_actions",
             action="parse_json_error",
             payload=raw_response,
             error=str(e),
         )
         return [
             CommandResult(
-                name="whispergate_json",
+                name="initiative_json",
                 payload={},
                 status="parse_error",
                 error=str(e),
@@ -343,7 +347,7 @@ def process_whispergate_json_actions(
     if not isinstance(data, dict):
         return [
             CommandResult(
-                name="whispergate_json",
+                name="initiative_json",
                 payload={},
                 status="parse_error",
                 error="Top-level JSON must be an object",
@@ -353,7 +357,7 @@ def process_whispergate_json_actions(
     if not data.get("should_act"):
         return [
             CommandResult(
-                name="whispergate_json",
+                name="initiative_json",
                 payload={},
                 status="silence",
             )
@@ -363,7 +367,7 @@ def process_whispergate_json_actions(
     if not isinstance(actions, list):
         return [
             CommandResult(
-                name="whispergate_json",
+                name="initiative_json",
                 payload=data,
                 status="parse_error",
                 error="'actions' must be a list",
@@ -375,7 +379,7 @@ def process_whispergate_json_actions(
     for action in actions:
         if not isinstance(action, dict):
             results.append(CommandResult(
-                name="whispergate_action",
+                name="initiative_action",
                 payload={},
                 status="parse_error",
                 error="Each action must be an object",
@@ -394,14 +398,15 @@ def process_whispergate_json_actions(
 
         command_name = command_name.strip()
         payload = {k: v for k, v in action.items() if k != "type"}
-
-        handler = COMMAND_HANDLERS.get(command_name)
+        command_def = command_registry.get(command_name)
+        handler = command_def.get("handler")
+        #handler = COMMAND_HANDLERS.get(command_name)
         if not handler:
             write_system_log(
                 level="warn",
                 module="core",
                 component="command_core",
-                function="process_whispergate_json_actions",
+                function="process_initiative_json_actions",
                 action="unknown_command",
                 command=command_name,
                 payload=action,
@@ -414,7 +419,7 @@ def process_whispergate_json_actions(
             continue
 
         try:
-            extra_kwargs = whispergate_data or {}
+            extra_kwargs = initiative_data or {}
             if source is not None:
                 extra_kwargs = {**extra_kwargs, "source": source}
 
@@ -444,7 +449,7 @@ def process_whispergate_json_actions(
                 level="error",
                 module="core",
                 component="command_core",
-                function="process_whispergate_json_actions",
+                function="process_initiative_json_actions",
                 action="command_error",
                 command=command_name,
                 payload=payload,
@@ -573,10 +578,7 @@ def extract_commands(text: str) -> Iterator[CommandMatch]:
         i = end
 
 
-# This allows referencing handlers directly by name
-COMMAND_HANDLERS = {
-    name: cfg["handler"] for name, cfg in command_registry.all().items()
-}
+
 
 FENCE_PATTERN = re.compile(
     r"(```.*?```|~~~.*?~~~)",
@@ -805,11 +807,11 @@ async def handle_muse_decision(
     client=None,
     model=muse_settings.get_section("llm_config").get("OPENAI_WHISPER_MODEL"),
     source=None,
-    whispergate_data=None,
+    initiative_data=None,
     tool_bundle=None,
 ) -> str:
     """
-    Processes WhisperGate (muse) backend decisions using the unified command extraction pipeline.
+    Processes Initiative (muse) backend decisions using the unified command extraction pipeline.
     Returns a terse summary string of processing results
     (e.g., 'Processed: speak; Error in remember_fact: ...').
     """
@@ -817,14 +819,14 @@ async def handle_muse_decision(
         dev_prompt,
         client=client,
         user_assistant_messages=user_assistant_messages,
-        prompt_type="whispergate",
+        prompt_type="initiative",
         model=model,
         tools=tool_bundle["tools"],
         tool_choice=tool_bundle["tool_choice"],
         handlers=tool_bundle["handlers"],
         ui_meta=tool_bundle["ui_meta"],
     )
-    print(f"WHISPERGATE COMMAND: {response}")
+    print(f"INITIATIVE COMMAND: {response}")
 
     write_system_log(
         level="debug",
@@ -842,15 +844,15 @@ async def handle_muse_decision(
             module="core",
             component="responder",
             function="handle_muse_decision",
-            action="wispergate_decision",
+            action="initiative_decision",
             result="silent"
         )
-        return "WhisperGate chose silence."
+        return "Initiative chose silence."
 
-    cmd_results = process_whispergate_json_actions(
+    cmd_results = process_initiative_json_actions(
         response,
         source=source,
-        whispergate_data=whispergate_data,
+        initiative_data=initiative_data,
         apply_filters=False,     # no <command-response> wrapping needed
     )
 
@@ -860,10 +862,10 @@ async def handle_muse_decision(
             module="core",
             component="responder",
             function="handle_muse_decision",
-            action="wispergate_decision",
-            result="No command block found in WhisperGate response."
+            action="initiative_decision",
+            result="No command block found in Initiative response."
         )
-        return "No command block found in WhisperGate response."
+        return "No command block found in Initiative response."
 
     # Log each command result
     for r in cmd_results:
@@ -886,7 +888,7 @@ async def handle_muse_decision(
         if r.status == "ok":
             summary_parts.append(f"Processed: {r.name}")
         elif r.status == "silence":
-            summary_parts.append(f"Whispergate chose silence")
+            summary_parts.append(f"Initiative chose silence")
         elif r.status == "no_handler":
             summary_parts.append(f"Unknown command: {r.name}")
         elif r.status == "parse_error":
@@ -896,7 +898,7 @@ async def handle_muse_decision(
 
     return "; ".join(summary_parts)
 
-def send_to_websocket(text: str, to="frontend", timestamp=None, retries=3, delay=0.3):
+def send_to_websocket(text: str, to="frontend", timestamp=None, retries=3, delay=0.5):
     payload = {"message": text, "to": to, "timestamp": timestamp}
     for attempt in range(1, retries + 1):
         try:

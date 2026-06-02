@@ -1,4 +1,5 @@
-# reminders_core.py
+# app/core/reminders/reminders_core.py
+
 from datetime import timedelta, datetime, timezone
 import re
 from pytimeparse2 import parse
@@ -6,9 +7,18 @@ from croniter import croniter
 from zoneinfo import ZoneInfo
 from cron_descriptor import get_description
 from app.core.memory_core import manager, cortex
-from app.config import muse_config
-from app.core.utils import serialize_doc
-from app.core.utils import _load_user_location
+from app.config import muse_settings
+from app.api.queues import log_queue, broadcast_queue
+from app.core.muse_responder import send_to_websocket, format_system_note
+from app.core.muse_responder import handle_muse_decision
+from app.core.prompt_profiles import build_check_reminders_prompt
+from app.services.openai_client import continuity_openai_client
+from app.core.utils import (write_system_log,
+                            serialize_doc,
+                            stringify_datetimes,
+                            build_command_response_block,
+                            _load_user_location,
+                            )
 
 def user_tz():
     loc = _load_user_location()
@@ -277,7 +287,7 @@ def search_for_timely_reminders(window_minutes=0.5):
             print(f"❌ Error processing reminder {entry.get('id')}: {e}")
             continue
 
-    print(f"✅ Found {len(triggered)} reminders ready to fire.")
+    #print(f"✅ Found {len(triggered)} reminders ready to fire.")
     return triggered
 
 def handle_search_reminders(payload):
@@ -328,3 +338,106 @@ def handle_search_reminders(payload):
         "query": query,  # ← include the original search parameters here
         "results": results_list  # ← the actual reminder data
     }
+
+async def handle_send_reminders(payload, source="reminder", reminders=None, **kwargs):
+    """
+    Sends reminder messages directly to the frontend, embedding <internal-data> in the text payload.
+    """
+    text = payload.get("text", "").strip()
+    if not text:
+        return "Missing text for send_reminders command"
+
+    to = payload.get("to", "frontend")
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    # Build the internal data block
+    reminders = stringify_datetimes(serialize_doc(reminders))
+    hidden = {
+        "reminders": reminders or [],
+        "source": source,
+        "timestamp": timestamp,
+    }
+
+    # Turn hidden dict into formatted string
+
+    note_schema = {
+        "exclude": ["created_on", "updated_on", "cron", "early_notification"],
+        "child_commands": ["edit_reminder", "snooze_reminder", "skip_reminder", "toggle_reminder"]
+    }
+    notes = []
+    for r in reminders:
+        #notes.append("---")
+        formatted = format_system_note(
+            cmd_name="send_reminder",
+            result=r,
+            schema=note_schema,
+        )
+        notes.append(formatted)
+        notes.append("")
+    hidden_str = "\n".join(notes)
+
+    internal_data_block = build_command_response_block(
+        visible="",  # or some summary if you ever want one
+        hidden=hidden_str,
+    )
+
+    # Combine the spoken text and the embedded data
+    combined_text = f"{text}\n\n{internal_data_block}"
+
+    # Send to websocket as the full message
+    muse_msg = {
+        "message": combined_text,
+        "timestamp": timestamp,
+        "role": "muse",
+        "source": "frontend",
+        "to": to,
+    }
+    await broadcast_queue.put(muse_msg)
+
+
+
+    write_system_log(
+        level="debug",
+        module="core",
+        component="responder",
+        function="handle_send_reminders",
+        action="send_reminders_executed",
+        text=text
+    )
+
+    try:
+        await log_queue.put({
+            "role": "muse",
+            "message": combined_text,
+            "source": source,
+            "timestamp": timestamp,
+            "skip_index": True
+        })
+    except Exception as e:
+        print(f"Logging error: {e}")
+
+    return ""
+
+# <editor-fold desc="run_check_reminders">
+async def run_check_reminders():
+    muse_features = muse_settings.get_section("muse_features") or {}
+    if not muse_features.get("ENABLE_REMINDERS", True):
+        return  # reminders globally disabled
+    loc = _load_user_location()
+    due_reminders = search_for_timely_reminders()
+    if due_reminders:
+        dev_prompt, user_assistant_messages, tool_bundle = build_check_reminders_prompt(due_reminders=due_reminders)
+
+        response = await handle_muse_decision(dev_prompt=dev_prompt, user_assistant_messages=user_assistant_messages, tool_bundle=tool_bundle, client=continuity_openai_client, model=muse_settings.get_section("llm_config").get("OPENAI_MODEL"), source="reminder", initiative_data={"reminders": due_reminders})
+
+        write_system_log(level="info", module="core", component="initiator", function="run_check_reminders",
+                         action="initiative_response", response=response)
+
+        #print("Initiative response:", response[:200].replace("\n", " ") + ("..." if len(response) > 200 else ""))
+
+        # ---- Update reminder for each reminder fired to add new early_notification calculations----
+        base_time = datetime.now(ZoneInfo(loc.timezone)) + timedelta(minutes=2)
+        for reminder in due_reminders:
+            handle_edit({"id": reminder["id"]}, base_time=base_time)
+            print(f"Updated next early_notification for {reminder.get('text', '')} ({reminder['id']})")
+# </editor-fold>

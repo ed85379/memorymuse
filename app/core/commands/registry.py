@@ -1,4 +1,4 @@
-# app/commands/registry.py
+# app/core/commands/registry.py
 
 class CommandRegistry:
     def __init__(self):

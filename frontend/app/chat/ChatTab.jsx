@@ -339,7 +339,7 @@ const ChatTab = (
     // sources: array of strings → multiple ?sources=... entries
     const srcs = sources && sources.length
       ? sources
-      : ["frontend", "reminder", "discovery", "whispergate"];
+      : ["frontend", "reminder", "discovery", "initiative"];
 
     srcs.forEach(src => params.append("sources", src));
 

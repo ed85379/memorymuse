@@ -391,8 +391,8 @@ def build_speaker_prompt(user_input, **kwargs):
 
     return dev_prompt, messages, tool_bundle
 # </editor-fold>
-# <editor-fold desc="whispergate_prompt">
-def build_whispergate_prompt(**kwargs):
+# <editor-fold desc="initiative_prompt">
+def build_initiative_prompt(**kwargs):
     builder = PromptBuilder()
     ctx = collect_prompt_context(**kwargs)
     prompt_plan = {
@@ -426,7 +426,7 @@ def build_whispergate_prompt(**kwargs):
         ],
     }
 
-    user_input = builder.make_whispergate_json_prompt(
+    user_input = builder.make_initiative_json_prompt(
         prompt_plan.get("commands", []),
         quiet_hours=is_quiet_hour(),
     )
@@ -469,7 +469,7 @@ def build_discoveryfeeds_prompt(**kwargs):
             "read_webpage",
         ],
     }
-    user_input = builder.make_whispergate_json_prompt(
+    user_input = builder.make_initiative_json_prompt(
         prompt_plan.get("commands", []),
         quiet_hours=is_quiet_hour(),
     )

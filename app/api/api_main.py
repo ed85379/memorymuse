@@ -15,13 +15,19 @@ from app.api.routers.import_api import router as import_router
 from app.api.routers.projects_api import router as projects_router
 from app.api.routers.files_api import router as files_router
 from app.api.routers.threads_api import router as threads_router
+from app.core.reminders.router import router as reminders_router
+from app.core.scheduler.router import router as scheduler_router
 from .queues import run_broadcast_queue, run_log_queue, run_index_queue, run_memory_index_queue, run_purge_queue, \
     broadcast_queue, log_queue, index_queue, index_memory_queue, purge_queue, summarization_queue, \
     run_summarization_queue
 from app.addon_loader.config import ENABLED_ADDONS
 from app.addon_loader.loader import load_addons
-from app.commands.core_commands import register_core_commands
-from app.commands.registry import command_registry
+from app.core.commands.core_commands import register_core_commands
+from app.core.commands.registry import command_registry
+from app.core.scheduler.scheduler_core import start_scheduler, stop_scheduler
+from app.core.reminders.scheduler_tasks import register_scheduler_tasks as register_reminders_schedule
+from app.core.reminders.commands import register_reminder_commands
+from app.core.initiative.scheduler_tasks import register_scheduler_tasks as register_initiative_schedule
 
 print("MODULE REGISTRY ID:", id(command_registry))
 
@@ -29,6 +35,7 @@ print("MODULE REGISTRY ID:", id(command_registry))
 
 app = FastAPI(debug=True)
 router = APIRouter()
+# Register core routers
 app.include_router(config_router)
 app.include_router(messages_router)
 app.include_router(cortex_router)
@@ -42,10 +49,20 @@ app.include_router(profile_router)
 app.include_router(muse_router)
 app.include_router(time_skip_router)
 app.include_router(threads_router)
+app.include_router(reminders_router)
+app.include_router(scheduler_router)
 
+# Register core commands
 app.state.command_registry = command_registry
-print("APP STATE REGISTRY ID:", id(app.state.command_registry))
 register_core_commands(command_registry)
+register_reminder_commands(command_registry)
+
+# Register core schedules
+register_reminders_schedule()
+register_initiative_schedule()
+
+# Register addon commands, schedules, tools, etc
+# See addon.py under addons directory
 load_addons(app, ENABLED_ADDONS)
 
 
@@ -70,7 +87,11 @@ async def startup_event():
     asyncio.create_task(run_memory_index_queue(index_memory_queue, build_memory_index))
     asyncio.create_task(run_purge_queue(purge_queue, purge_message_job))
     asyncio.create_task(run_summarization_queue(summarization_queue, run_thread_summarization))
+    await start_scheduler()
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    await stop_scheduler()
 
 
 if __name__ == "__main__":

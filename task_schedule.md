@@ -7,7 +7,7 @@ This document outlines the scheduled tasks (internal loops) used in GPT-Echo, de
 
 ## ✅ Active Scheduled Tasks
 
-### `run_whispergate` – Echo's spontaneous thoughts
+### `run_initiative` – Echo's spontaneous thoughts
 **Interval:** 600s (10 min)  
 - **Stage 1: `gpt-4.1-nano`**
   - Profile: tone, perspective, tendencies

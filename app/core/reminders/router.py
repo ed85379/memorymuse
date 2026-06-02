@@ -1,10 +1,12 @@
+# app/core/reminders/router.py
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Literal, Optional
 from .reminders_core import handle_snooze, handle_skip, handle_toggle
 
 
-reminders_router = APIRouter(prefix="/api/reminders", tags=["reminders"])
+router = APIRouter(prefix="/api/reminders", tags=["reminders"])
 
 class ReminderActionPayload(BaseModel):
     action: Literal["snooze", "skip", "toggle"]
@@ -12,7 +14,7 @@ class ReminderActionPayload(BaseModel):
     skip_until: Optional[str] = None     # ISO 8601
     status: Optional[Literal["enabled", "disabled"]] = None
 
-@reminders_router.post("/{reminder_id}/action")
+@router.post("/{reminder_id}/action")
 def reminder_action(reminder_id: str, payload: ReminderActionPayload):
     # sanity: make sure path id and payload id don’t drift
     base_payload = {"id": reminder_id}

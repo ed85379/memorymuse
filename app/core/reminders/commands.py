@@ -1,6 +1,8 @@
+# app/core/reminders/commands.py
+# This file contains the commands that are specific to the reminders subsystem
 
 import asyncio
-from .reminders_core import (
+from app.core.reminders.reminders_core import (
     handle_set,
     handle_edit,
     handle_skip,

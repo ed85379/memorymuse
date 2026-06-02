@@ -206,5 +206,10 @@ export const SETTINGS_META = {
       description:
         "If enabled, in combination with Thread Extended History, messages already summarized in the thread will not appear in full to your muse. Disabling this will increase thread API costs.",
     },
+    ENABLE_SCHEDULER: {
+      label: "Scheduler.",
+      description:
+        "If enabled, properly registered tasks will run.",
+    },
   },
 };
