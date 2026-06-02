@@ -313,13 +313,14 @@ async def get_openai_response(
                     request_kwargs["tool_choice"] = tool_choice
             timestamp = datetime.now(timezone.utc).isoformat()
             msg = f"{muse_settings.get_section('muse_config').get('MUSE_NAME')} is thinking..."
-            await broadcast_message(
-                message=msg,
-                timestamp=timestamp,
-                role="muse",
-                to_modality="frontend",
-                payload_type="status_message",
-            )
+            if prompt_type == "api":
+                await broadcast_message(
+                    message=msg,
+                    timestamp=timestamp,
+                    role="muse",
+                    to_modality="frontend",
+                    payload_type="status_message",
+                )
             response = await client.responses.create(
                 model=model,
                 input=current_input,
@@ -411,13 +412,14 @@ async def get_openai_response(
                     }
                     timestamp = datetime.now(timezone.utc).isoformat()
                     msg = ui_meta[function_name]["error"]
-                    await broadcast_message(
-                        message=msg,
-                        timestamp=timestamp,
-                        role="muse",
-                        to_modality="frontend",
-                        payload_type="status_message",
-                    )
+                    if prompt_type == "api":
+                        await broadcast_message(
+                            message=msg,
+                            timestamp=timestamp,
+                            role="muse",
+                            to_modality="frontend",
+                            payload_type="status_message",
+                        )
 
                 tool_output = tool_result["tool_output"]
                 attachments = tool_result.get("attachments", [])
