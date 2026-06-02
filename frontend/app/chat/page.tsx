@@ -460,6 +460,44 @@ export default function ChatPage() {
                 audioControls.audioResponseRef.current(incoming);
               }
             }
+            break;
+          }
+
+          case "user_message": {
+            const text = data.message;
+            const role = data.role;
+            const message_id = data.message_id;
+            const project_id = data.project_id;
+            const thread_id = data.thread_id;
+            const timestamp = data.timestamp;
+
+            const incoming = {
+              role,
+              text,
+              message_id,
+              timestamp,
+              project_id,
+              thread_ids: thread_id ? [thread_id] : []
+            };
+
+            setMessages(prev => {
+              const updated = trimMessages(
+                upsertMessage(prev, incoming),
+                ACTIVE_WINDOW_LIMIT
+              );
+              setScrollToMessageId(message_id);
+              return updated;
+            });
+
+            if (thread_id) {
+              setThreadMessages(prev => {
+                const updated = trimMessages(
+                  upsertMessage(prev, incoming),
+                  ACTIVE_WINDOW_LIMIT
+                );
+                return updated;
+              });
+            }
 
             break;
           }

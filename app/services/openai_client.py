@@ -14,12 +14,12 @@ openai.api_key = muse_settings.get_section("llm_config").get("OPENAI_API_KEY")
 
 # Initialize the OpenAI client
 autotags_openai_client = openai.OpenAI()
-api_openai_client = openai.OpenAI()
-discord_openai_client = openai.OpenAI()
-continuity_openai_client = openai.OpenAI()
-speak_openai_client = openai.OpenAI()
-mention_openai_client = openai.OpenAI()
-journal_openai_client = openai.OpenAI()
+api_openai_client = openai.AsyncOpenAI()
+discord_openai_client = openai.AsyncOpenAI()
+continuity_openai_client = openai.AsyncOpenAI()
+speak_openai_client = openai.AsyncOpenAI()
+mention_openai_client = openai.AsyncOpenAI()
+journal_openai_client = openai.AsyncOpenAI()
 audio_openai_client = openai.OpenAI()
 mnemosyne_openai_client = openai.OpenAI()
 llamacpp_client = openai.OpenAI(
@@ -320,7 +320,7 @@ async def get_openai_response(
                 to_modality="frontend",
                 payload_type="status_message",
             )
-            response = client.responses.create(
+            response = await client.responses.create(
                 model=model,
                 input=current_input,
                 store=True,

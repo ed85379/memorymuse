@@ -119,6 +119,7 @@ async def talk_endpoint(request: Request, background_tasks: BackgroundTasks):
         "timestamp": user_timestamp or datetime.now(timezone.utc).isoformat(),
         "role": "user",
         "source": "frontend",
+        "payload_type": "user_message",
     }
     user_message_id = assign_message_id(user_msg)
     user_msg["message_id"] = user_message_id
