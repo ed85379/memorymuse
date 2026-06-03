@@ -3,6 +3,7 @@ import os
 from bson import ObjectId
 from app.config import muse_settings, MONGO_CONVERSATION_COLLECTION
 from app.core.utils import SOURCES_CHAT
+from app.core.tools.registry import tool_registry
 
 
 muse_name = muse_settings.get_section('muse_config').get('MUSE_NAME')
@@ -456,10 +457,9 @@ def generate_muse_image(prompt, explicit: bool = False):
         }
 
 
-
-
 def build_tool_bundle(tool_names):
-    selected = [TOOL_REGISTRY[name] for name in tool_names]
+    #selected = [TOOL_REGISTRY[name] for name in tool_names]
+    selected = [tool_registry.get(name) for name in tool_names]
 
     tools = [entry["schema"] for entry in selected]
 
@@ -495,16 +495,29 @@ TOOL_REGISTRY = {
             "type": "function",
             "name": "search_memory",
             "description": (
-                "Search conversation history from your message store. "
+                "Search conversation history from your message store.\n"
                 "Use this when you need to recover prior chat context that is not currently visible, "
                 "such as earlier messages in the current thread, semantically related past discussion, "
-                "or messages surrounding a previously shown [search_memory ID] reference. "
-                "This tool searches raw conversation messages rather than curated memory layers. "
-                "Modes: "
-                "`semantic` for meaning-based retrieval with optional project/time filters; "
-                "`recent` for messages immediately before the current visible conversation window; "
-                "`around` for messages before and after a specific visible [search_memory ID]. "
-                "Soft failures return a formatted system note instead of raising an exception."
+                "or messages surrounding a previously shown [search_memory ID] reference.\n"
+                "This tool searches raw conversation messages rather than curated memory layers.\n"
+                "Modes:\n"
+                "`semantic` for meaning-based retrieval with optional project/time filters;\n"
+                "`recent` for messages immediately before the current visible conversation window;\n"
+                "`around` for messages before and after a specific visible [search_memory ID].\n"
+                "Soft failures return a formatted system note instead of raising an exception.\n"
+                "Mode behavior:\n"
+                "semantic:\n"
+                "  - Requires query\n"
+                "  - Uses project_ids and time filters\n"
+                "  - Finds semantically related messages\n"
+                "recent:\n"
+                "  - Does not use query or project_ids\n"
+                "  - Returns messages immediately before the current visible recent-context window\n"
+                "  - Useful for recovering the prior local conversational edge\n"
+                "around:\n"
+                "  - Requires search_memory_id\n"
+                "  - Does not use query or project_ids\n"
+                "  - Returns messages around a previously surfaced anchor"
             ),
             "parameters": {
                 "type": "object",
@@ -832,3 +845,8 @@ TOOL_REGISTRY = {
         "handler": read_webpage,
     },
 }
+
+def register_core_tools(registry):
+    for name, handler in TOOL_REGISTRY.items():
+        print(f"Registering Core Tool: {name}")
+        registry.register(name, handler)

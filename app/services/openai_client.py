@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from app.config import muse_settings
 from app.core import utils
-from app.core.muse_actions import run_tool
+from app.core.tools.core_tools import run_tool
 from app.interfaces.websocket_server import broadcast_message
 
 openai.api_key = muse_settings.get_section("llm_config").get("OPENAI_API_KEY")
@@ -493,7 +493,6 @@ def get_openai_autotags(text, model="gpt-5.4-nano"):
     return tags
 
 def get_openai_custom_response(dev_prompt, user_prompt, client, model="gpt-5-nano", reasoning="minimal"):
-    import json, sys
     payload = [
         {"role": "developer", "content": dev_prompt},
         {"role": "user", "content": user_prompt}

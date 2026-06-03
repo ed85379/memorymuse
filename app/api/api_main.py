@@ -9,7 +9,6 @@ from app.databases.memory_indexer import build_index, build_memory_index
 from app.api.routers.system_api import config_router, uipolling_router, states_router, time_skip_router
 from app.api.routers.muse_presence_api import profile_router, muse_router
 from app.api.routers.messages_api import router as messages_router
-from app.api.routers.cortex_api import router as cortex_router
 from app.api.routers.memory_api import memory_router
 from app.api.routers.import_api import router as import_router
 from app.api.routers.projects_api import router as projects_router
@@ -24,6 +23,8 @@ from app.addon_loader.config import ENABLED_ADDONS
 from app.addon_loader.loader import load_addons
 from app.core.commands.core_commands import register_core_commands
 from app.core.commands.registry import command_registry
+from app.core.tools.core_tools import register_core_tools
+from app.core.tools.registry import tool_registry
 from app.core.scheduler.scheduler_core import start_scheduler, stop_scheduler
 from app.core.reminders.scheduler_tasks import register_scheduler_tasks as register_reminders_schedule
 from app.core.reminders.commands import register_reminder_commands
@@ -38,7 +39,6 @@ router = APIRouter()
 # Register core routers
 app.include_router(config_router)
 app.include_router(messages_router)
-app.include_router(cortex_router)
 app.include_router(memory_router)
 app.include_router(import_router)
 app.include_router(projects_router)
@@ -56,6 +56,10 @@ app.include_router(scheduler_router)
 app.state.command_registry = command_registry
 register_core_commands(command_registry)
 register_reminder_commands(command_registry)
+
+# Register core tools
+app.state.tool_registry = tool_registry
+register_core_tools(tool_registry)
 
 # Register core schedules
 register_reminders_schedule()

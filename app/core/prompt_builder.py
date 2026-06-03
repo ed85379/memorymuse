@@ -361,7 +361,7 @@ class PromptBuilder:
             "text": current_user_message,
             "attachments": file_attachments,
         })
-        from app.core.muse_actions import build_tool_bundle
+        from app.core.tools.core_tools import build_tool_bundle
         tool_bundle = build_tool_bundle(included_tools)
         return {
             "developer_text": "\n\n".join(developer_parts),
