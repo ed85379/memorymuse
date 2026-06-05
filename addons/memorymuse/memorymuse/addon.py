@@ -23,7 +23,11 @@ def register_commands(app):
 
 
 def register_tools(app):
-    pass
+    from .reach.image_gen.image_gen_tools import register_tools as register_image_gen_tools
+    register_image_gen_tools(app.state.tool_registry)
+    from .reach.web_tools.web_tools import register_tools as register_web_tools
+    register_web_tools(app.state.tool_registry)
+
 
 def register_scheduler_tasks() -> None:
     from .reach.discoveryfeeds.scheduler_tasks import register_scheduler_tasks as register_discoveryfeeds
