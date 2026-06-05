@@ -1123,6 +1123,8 @@ class PromptBuilder:
                 "- Always include the outer curly braces `{}`\n"
                 "- Wrap all property names and string values in double quotes\n"
                 "- Do not use YAML-style formatting or omit quotes\n"
+                "- You do not need to repeat what is inside the [COMMAND: ...] block, outside the block. "
+                "The UI will show what is meant to be seen automatically."
                 f"- {muse_settings.get_section('muse_config').get('MUSE_NAME')} may invoke any of these commands at their discretion, without waiting for a user request or explicit prompt. They are trusted to use judgment, context, and care when choosing to remember, remind, or use any of these commands without asking first.\n\n"
                 "Example:\n[COMMAND: remember_fact] {\"text\": \"Tuesday night is Ed's Hogwarts game night.\"} [/COMMAND]"
             )
