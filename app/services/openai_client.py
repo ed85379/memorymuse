@@ -22,7 +22,7 @@ mention_openai_client = openai.AsyncOpenAI()
 journal_openai_client = openai.AsyncOpenAI()
 audio_openai_client = openai.OpenAI()
 mnemosyne_openai_client = openai.OpenAI()
-llamacpp_client = openai.OpenAI(
+llamacpp_client = openai.AsyncOpenAI(
     base_url="http://10.1.1.107:8080/v1",
     api_key = "sk-no-key-required"
 )
