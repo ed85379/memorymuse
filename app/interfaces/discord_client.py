@@ -8,7 +8,7 @@ import base64
 import re
 import websockets
 import json
-from app.core.utils import strip_muse_thoughts
+from app.core.utils import strip_muse_private_blocks
 from app.config import WEBSOCKET_URL, muse_settings
 from app.core.memory_core import log_message
 from app.services.openai_client import get_openai_response, discord_openai_client
@@ -71,7 +71,7 @@ async def handle_incoming_discord_message(message):
             files_payload = []
             for att in message.attachments:
                 print(f"DEBUG Content_type: {att.content_type}")
-                if att.content_type and att.content_type.startswith("image/"):
+                if att.content_type:
                     data = await att.read()
                     b64 = base64.b64encode(data).decode("ascii")
                     files_payload.append({
@@ -140,7 +140,7 @@ async def handle_incoming_discord_message(message):
                 }
             )
             #print("✅ Muse response logged.")
-            muse_response = strip_muse_thoughts(muse_response)
+            muse_response = strip_muse_private_blocks(muse_response)
             #muse_response = re.sub(r"<muse-experience>.*?</muse-experience>", "", muse_response, flags=re.DOTALL)
             # Send reply
             await message.channel.send(muse_response)

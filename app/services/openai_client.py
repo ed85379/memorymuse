@@ -29,7 +29,7 @@ llamacpp_client = openai.AsyncOpenAI(
 
 PROMPT_CACHE_KEYS = {
     "default": "iris_default_v1",
-    "api": "iris_api_v1",
+    "webui": "iris_webui_v1",
     "discord": "iris_discord_v1",
     "initiative": "iris_initiative_v1",
     "discovery": "iris_initiative_v1",
@@ -313,7 +313,7 @@ async def get_openai_response(
                     request_kwargs["tool_choice"] = tool_choice
             timestamp = datetime.now(timezone.utc).isoformat()
             msg = f"{muse_settings.get_section('muse_config').get('MUSE_NAME')} is thinking..."
-            if prompt_type == "api":
+            if prompt_type == "webui":
                 await broadcast_message(
                     message=msg,
                     timestamp=timestamp,
@@ -338,8 +338,9 @@ async def get_openai_response(
                     f"Tokens — input: {response.usage.input_tokens},\n"
                     f"cached: {response.usage.input_tokens_details.cached_tokens},\n"
                     f"Tokens - output: {response.usage.output_tokens},\n"
-                    f"Reasoning tokens: {response.usage.output_tokens_details.reasoning_tokens}\n"
                 )
+                if hasattr(response.usage.output_tokens_details, "reasoning_tokens"):
+                    print(f"Reasoning tokens: {response.usage.output_tokens_details.reasoning_tokens}\n")
 
                 utils.write_system_log(
                     level="debug",
@@ -390,7 +391,7 @@ async def get_openai_response(
                     msg = ui_meta[function_name]["start"]
                     print(f"msg: {msg}")
                     try:
-                        if prompt_type == "api":
+                        if prompt_type == "webui":
                             await asyncio.wait_for(
                                 broadcast_message(
                                     message=msg,
@@ -412,7 +413,7 @@ async def get_openai_response(
                     }
                     timestamp = datetime.now(timezone.utc).isoformat()
                     msg = ui_meta[function_name]["error"]
-                    if prompt_type == "api":
+                    if prompt_type == "webui":
                         await broadcast_message(
                             message=msg,
                             timestamp=timestamp,

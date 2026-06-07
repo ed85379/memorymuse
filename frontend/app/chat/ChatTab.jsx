@@ -255,6 +255,8 @@ const ChatTab = (
         blend_ratio: focus,
         injected_files: injectedFiles.map(f => f.id),
         ephemeral_files: ephemeralPayload
+        source: "webui"
+        prompt_type: "webui"
       }),
     });
 

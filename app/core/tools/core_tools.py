@@ -220,34 +220,48 @@ def view_image(image_url=None, file_id=None):
     }
 
 
+OPENAI_NATIVE_TOOLS = {"web_search"}
+
 def build_tool_bundle(tool_names):
-    #selected = [TOOL_REGISTRY[name] for name in tool_names]
-    selected = [tool_registry.get(name) for name in tool_names]
+    selected = []
+    native_tool_names = []
 
-    tools = [entry["schema"] for entry in selected]
+    for name in tool_names:
+        if name in OPENAI_NATIVE_TOOLS:
+            native_tool_names.append(name)
+        else:
+            selected.append(tool_registry.get(name))
 
-    tool_choice = {
-        "type": "allowed_tools",
-        "mode": "auto",
-        "tools": [
-            {"type": "function", "name": entry["schema"]["name"]}
-            for entry in selected
-        ],
-    }
+    tools = []
+    allowed_tools = []
+    ui_meta = {}
+    handlers = {}
 
-    ui_meta = {
-        entry["schema"]["name"]: entry.get("ui", {})
-        for entry in selected
-    }
+    for name in native_tool_names:
+        if name == "web_search":
+            tools.append({"type": "web_search"})
+            allowed_tools.append({"type": "web_search"})
 
-    handlers = {
-        entry["schema"]["name"]: entry["handler"]
-        for entry in selected
-    }
+    for entry in selected:
+        name = entry["schema"]["name"]
+
+        tools.append(entry["schema"])
+
+        allowed_tools.append({
+            "type": "function",
+            "name": name,
+        })
+
+        ui_meta[name] = entry.get("ui", {})
+        handlers[name] = entry["handler"]
 
     return {
         "tools": tools,
-        "tool_choice": tool_choice,
+        "tool_choice": {
+            "type": "allowed_tools",
+            "mode": "auto",
+            "tools": allowed_tools,
+        },
         "ui_meta": ui_meta,
         "handlers": handlers,
     }

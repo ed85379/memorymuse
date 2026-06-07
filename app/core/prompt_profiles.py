@@ -4,7 +4,7 @@ from app.core.utils import is_conversation_active
 from app.core.time_location_utils import is_quiet_hour
 
 # <editor-fold desc="api_prompt">
-def build_api_prompt(user_input, **kwargs):
+def build_webui_prompt(user_input, **kwargs):
     builder = PromptBuilder()
     ctx = collect_prompt_context(**kwargs)
     prompt_plan = {
@@ -43,7 +43,7 @@ def build_api_prompt(user_input, **kwargs):
         ],
         "tools": [
             "search_memory",
-            "search_web",
+            "web_search",
             "search_news",
             "search_images",
             "view_image",
@@ -61,7 +61,7 @@ def build_api_prompt(user_input, **kwargs):
     return dev_prompt, messages, tool_bundle
 # </editor-fold>
 # <editor-fold desc="scene_api_prompt">
-def build_scene_api_prompt(user_input, **kwargs):
+def build_scene_webui_prompt(user_input, **kwargs):
     builder = PromptBuilder()
     ctx = collect_prompt_context(**kwargs)
     prompt_plan = {
@@ -140,14 +140,7 @@ def build_discord_prompt(user_input, **kwargs):
         ],
         "commands": [],
         "tools": [
-            "search_memory",
-            "search_web",
-            "search_news",
-            "search_images",
-            "view_image",
-            "read_webpage",
-            "generate_muse_image",
-            "generate_image"
+            "web_search",
         ],
     }
     assembled_prompt_sections = builder.assemble_prompt_sections(user_input, prompt_plan, **ctx)
