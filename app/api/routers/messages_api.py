@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from dateutil.parser import parse
 from typing import Any
 from bson import ObjectId
-from app.core.utils import strip_muse_thoughts, serialize_doc, strip_gm_notes
+from app.core.utils import strip_muse_private_blocks, serialize_doc, strip_gm_notes
 from app.databases.mongo_connector import mongo, mongo_system
 from app.databases.memory_indexer import update_qdrant_metadata_for_messages
 from app.config import muse_settings, MONGO_CONVERSATION_COLLECTION, MONGO_STATES_COLLECTION
@@ -142,7 +142,7 @@ def get_messages(
     for msg in logs:
         text = msg.get("message") or ""
         if not thought_view_enabled:
-            text = strip_muse_thoughts(text)
+            text = strip_muse_private_blocks(text)
         if not gm_view_enabled:
             text = strip_gm_notes(text)
 
@@ -204,7 +204,7 @@ def get_deleted_messages(
     for msg in logs:
         text = msg.get("message") or ""
         if not thought_view_enabled:
-            text = strip_muse_thoughts(text)
+            text = strip_muse_private_blocks(text)
         if not gm_view_enabled:
             text = strip_gm_notes(text)
 
@@ -601,7 +601,7 @@ def get_messages_by_day(
     for msg in logs:
         text = msg.get("message") or ""
         if not thought_view_enabled:
-            text = strip_muse_thoughts(text)
+            text = strip_muse_private_blocks(text)
         if not gm_view_enabled:
             text = strip_gm_notes(text)
 

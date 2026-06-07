@@ -649,7 +649,7 @@ def command_is_allowed(command: str) -> bool:
     muse_features = muse_settings.get_section("muse_features") or {}
     return bool(muse_features.get(flag, True))  # default to enabled
 
-def strip_muse_thoughts(text: str) -> str:
+def strip_muse_private_blocks(text: str) -> str:
     text = re.sub(r"<muse-experience>.*?</muse-experience>", "", text, flags=re.DOTALL)
     text = re.sub(r"<muse-interlude>.*?</muse-interlude>", "", text, flags=re.DOTALL)
     return text
