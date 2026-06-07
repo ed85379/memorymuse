@@ -734,7 +734,7 @@ def normalize_muse_experience_tags(text: str) -> str:
 class RouteUserInputResult:
     response_text: str
     cmd_results: list
-    followup_turn: dict | None = None
+    followup_turn: str | None = None
 
 async def route_user_input(
         dev_prompt: str,
