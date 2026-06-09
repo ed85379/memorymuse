@@ -430,15 +430,17 @@ def get_user_tags(
 @router.get("/calendar_status_exported")
 def get_calendar_status(
     days: int = Query(30, ge=1, le=366),
-    source: str = Query(None, description="Optional source filter (Frontend, ChatGPT)")
+    source: str = Query(None, description="Optional source filter (WebUI, ChatGPT)")
 ):
     start_date = datetime.now(timezone.utc) - timedelta(days=days)
     match_filter = {
         "timestamp": {"$gte": start_date}
     }
     if source:
-        # Always treat source as case-insensitive for safety
-        match_filter["source"] = source.lower()
+        if source not in ["frontend", "webui"]:
+            match_filter["source"] = source.lower()
+        else:
+            match_filter["source"] = {"$in": ["frontend", "webui"]}
     else:
         # If not specified, keep original behavior: ignore chatgpt
         match_filter["source"] = {"$ne": "chatgpt"}
@@ -476,7 +478,10 @@ def get_calendar_status_simple(
 
     # Source
     if source:
-        query["source"] = source.lower()
+        if source not in ["frontend", "webui"]:
+            query["source"] = source.lower()
+        else:
+            query["source"] = {"$in": ["frontend", "webui"]}
     else:
         query["source"] = {"$ne": "chatgpt"}
 
@@ -534,7 +539,7 @@ def get_calendar_status_simple(
 @router.get("/by_day")
 def get_messages_by_day(
     date: str = Query(..., description="YYYY-MM-DD"),
-    source: str = Query(None, description="Optional source filter (Frontend, ChatGPT, Discord)"),
+    source: str = Query(None, description="Optional source filter (WebUI, ChatGPT, Discord)"),
     tag: List[str] = Query(None),
     project_id: Optional[str] = None,
     thread_id: List[str] = Query(None),
@@ -549,10 +554,10 @@ def get_messages_by_day(
     query = build_date_query(date)  # {"timestamp": {"$gte": utc_start, "$lt": utc_end}}
 
     # Source
-    if source:
+    if source not in ["frontend", "webui"]:
         query["source"] = source.lower()
     else:
-        query["source"] = {"$eq": "frontend"}
+        query["source"] = {"$in": ["frontend", "webui"]}
 
     # Tags
     if tag:

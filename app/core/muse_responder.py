@@ -734,7 +734,9 @@ def normalize_muse_experience_tags(text: str) -> str:
 class RouteUserInputResult:
     response_text: str
     cmd_results: list
+    usage: dict
     followup_turn: str | None = None
+    tool_calls: dict | None = None
 
 async def route_user_input(
         dev_prompt: str,
@@ -746,7 +748,7 @@ async def route_user_input(
         command_context=None,
 ) -> RouteUserInputResult:
 
-    response = await get_openai_response(
+    result = await get_openai_response(
         dev_prompt,
         client=client,
         user_assistant_messages=user_assistant_messages,
@@ -757,7 +759,11 @@ async def route_user_input(
         handlers=tool_bundle["handlers"],
         ui_meta=tool_bundle["ui_meta"],
     )
-
+    response = result.get("text", "")
+    tool_calls = result.get("tool_calls", [])
+    usage = result.get("usage", [])
+    print(f"\nDEBUG Tool Calls:\n{tool_calls}\n\n")
+    print(f"\nDEBUG usage:\n{usage}\n\n")
     # Normalize muse-experience tags outside of fenced code blocks
     response = normalize_muse_experience_tags(response)
 
@@ -797,7 +803,9 @@ async def route_user_input(
     return RouteUserInputResult(
         response_text=followup_result["cleaned_text"],
         cmd_results=cmd_results,
-        followup_turn=followup_result["intent"]
+        usage=usage,
+        followup_turn=followup_result["intent"],
+        tool_calls=tool_calls
     )
 
 # Handles muse_initiator-specific responses
@@ -815,7 +823,7 @@ async def handle_muse_decision(
     Returns a terse summary string of processing results
     (e.g., 'Processed: speak; Error in remember_fact: ...').
     """
-    response = await get_openai_response(
+    result = await get_openai_response(
         dev_prompt,
         client=client,
         user_assistant_messages=user_assistant_messages,
@@ -826,6 +834,9 @@ async def handle_muse_decision(
         handlers=tool_bundle["handlers"],
         ui_meta=tool_bundle["ui_meta"],
     )
+    response = result.get("text", "")
+    tool_calls = result.get("tool_calls", [])
+    usage = result.get("usage", [])
     print(f"INITIATIVE COMMAND: {response}")
 
     write_system_log(
@@ -898,7 +909,7 @@ async def handle_muse_decision(
 
     return "; ".join(summary_parts)
 
-def send_to_websocket(text: str, to="frontend", timestamp=None, retries=3, delay=0.5):
+def send_to_websocket(text: str, to="webui", timestamp=None, retries=3, delay=0.5):
     payload = {"message": text, "to": to, "timestamp": timestamp}
     for attempt in range(1, retries + 1):
         try:

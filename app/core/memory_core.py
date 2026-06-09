@@ -40,7 +40,7 @@ model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
 async def log_message(
         role,
         message,
-        source="frontend",
+        source="webui",
         metadata=None,
         flags=None,
         user_tags=None,

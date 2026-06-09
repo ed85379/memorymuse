@@ -51,7 +51,7 @@ COMMANDS = {
     },
     "route_message": {
         "triggers": [],
-        "format": "[COMMAND: route_message] {\"text\": \"message to send\", \"to\": \"frontend || discord\" } [/COMMAND]",
+        "format": "[COMMAND: route_message] {\"text\": \"message to send\", \"to\": \"webui || discord\" } [/COMMAND]",
         "handler": lambda payload, **kwargs: asyncio.create_task(handle_route_message(payload, **kwargs))
     },
     "choose_silence": {
@@ -217,7 +217,7 @@ def handle_set_motd(payload, source=None):
             message=text,
             timestamp=timestamp,
             role="muse",
-            to_modality="frontend",
+            to_modality="webui",
             payload_type="motd_update",
         ))
         if source:
@@ -243,7 +243,7 @@ def handle_set_motd(payload, source=None):
             "error": "Setting MOTD failed",
         }
 
-async def handle_mention_command(payload, to="frontend", source="frontend"):
+async def handle_mention_command(payload, to="webui", source="webui"):
     """
     This is intended for when the AI prompts itself to speak
     """
@@ -269,10 +269,10 @@ async def handle_mention_command(payload, to="frontend", source="frontend"):
     dev_prompt, user_assistant_messages, tool_bundle = build_speak_prompt(
         subject=subject,
         payload=payload,
-        destination="frontend"
+        destination="webui"
     )
 
-    response = await get_openai_response(
+    result = await get_openai_response(
         dev_prompt=dev_prompt,
         user_assistant_messages=user_assistant_messages,
         client=mention_openai_client,
@@ -283,6 +283,9 @@ async def handle_mention_command(payload, to="frontend", source="frontend"):
         handlers = tool_bundle["handlers"],
         ui_meta=tool_bundle["ui_meta"],
     )
+    response = result.get("text", "")
+    tool_calls = result.get("tool_calls", [])
+    usage = result.get("usage", [])
 
     raw_response = normalize_muse_experience_tags((response or "").strip())
     silence_markers = {"", "<silence />", "<silence/>", "<silence></silence>"}
@@ -333,7 +336,7 @@ async def handle_mention_command(payload, to="frontend", source="frontend"):
         "message": cleaned_response,
         "timestamp": timestamp,
         "role": "muse",
-        "source": "frontend",
+        "source": "webui",
         "to": to,
     }
     await broadcast_queue.put(muse_msg)
@@ -352,14 +355,14 @@ async def handle_mention_command(payload, to="frontend", source="frontend"):
     await log_queue.put({
         "role": "muse",
         "message": cleaned_response,
-        "source": "frontend",
+        "source": "webui",
         "timestamp": timestamp
     })
 
     return ""
 
 
-async def handle_route_message(payload, source="frontend"):
+async def handle_route_message(payload, source="webui"):
     """
     This is intended for when the AI tells itself exactly what to say over another interface
     """
@@ -369,7 +372,7 @@ async def handle_route_message(payload, source="frontend"):
         return "Skipped route message due to quiet hours"
 
     text = payload.get("text", "")
-    to = payload.get("to", "frontend")
+    to = payload.get("to", "webui")
     if not text:
         return "Missing text for route_message command"
 
@@ -381,7 +384,7 @@ async def handle_route_message(payload, source="frontend"):
         "message": text,
         "timestamp": timestamp,
         "role": "muse",
-        "source": "frontend",
+        "source": "webui",
         "to": to,
     }
     await broadcast_queue.put(muse_msg)
@@ -413,7 +416,7 @@ async def handle_journal_command(payload, entry_type="public", source=None):
 
     dev_prompt, user_assistant_messages, tool_bundle = build_journal_prompt(subject=subject, payload=payload)
 
-    response = await get_openai_response(
+    result = await get_openai_response(
         dev_prompt=dev_prompt,
         user_assistant_messages=user_assistant_messages,
         client=journal_openai_client,
@@ -424,6 +427,9 @@ async def handle_journal_command(payload, entry_type="public", source=None):
         handlers=tool_bundle["handlers"],
         ui_meta=tool_bundle["ui_meta"],
     )
+    response = result.get("text", "")
+    tool_calls = result.get("tool_calls", [])
+    usage = result.get("usage", [])
 
     create_journal_entry(
         title=subject,

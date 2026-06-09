@@ -389,7 +389,7 @@ async def handle_send_reminders(payload, source="reminder", reminders=None, **kw
         "message": combined_text,
         "timestamp": timestamp,
         "role": "muse",
-        "source": "frontend",
+        "source": "webui",
         "to": to,
     }
     await broadcast_queue.put(muse_msg)

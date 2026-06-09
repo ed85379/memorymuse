@@ -148,7 +148,7 @@ COMMANDS = {
     },
     "send_reminders": {
         "triggers": [],
-        "format": "[COMMAND: send_reminders] {\"text\": \"message to send\", \"to\": \"frontend\"} [/COMMAND]",
+        "format": "[COMMAND: send_reminders] {\"text\": \"message to send\", \"to\": \"webui\"} [/COMMAND]",
         "handler": lambda payload, **kwargs: asyncio.create_task(handle_send_reminders(payload, **kwargs))
     },
     "search_reminders": {

@@ -26,7 +26,7 @@ async def run_broadcast_queue(
                 message=msg["message"],
                 role=msg["role"],
                 timestamp=msg.get("timestamp"),
-                to_modality=msg.get("to", "frontend"),
+                to_modality=msg.get("to", "webui"),
                 project_id=msg.get("project_id", ""),
                 thread_id=msg.get("thread_id", ""),
                 message_id=msg.get("message_id", ""),
@@ -54,14 +54,16 @@ async def run_log_queue(
 ):
     while True:
         msg = await queue.get()
+        thread_id = msg.get("thread_id")
         try:
             await log_message(
                 role=msg.get("role", "muse"),
                 message=msg["message"],
                 timestamp=msg.get("timestamp"),
                 project_id=msg.get("project_id"),
-                thread_ids=[msg.get("thread_id")],
+                thread_ids=[thread_id] if thread_id else [],
                 source=msg.get("source"),
+                metadata=msg.get("metadata") or {},
                 message_id=msg.get("message_id", ""),
                 skip_index=msg.get("skip_index", False)
                 # Add any other fields your log_message expects

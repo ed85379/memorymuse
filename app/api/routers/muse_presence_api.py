@@ -161,14 +161,14 @@ async def create_journal_entry(request: Request):
 async def muse_speak(request: Request):
     data = await request.json()
     message = data.get("message", "")
-    target = data.get("to", "frontend")
+    target = data.get("to", "webui")
     timestamp = data.get("timestamp", datetime.now(timezone.utc).isoformat())
     if message:
         msg = {
             "message": message,
             "timestamp": timestamp,
             "role": "muse",
-            "source": "frontend",
+            "source": "webui",
             "to": target
         }
         await broadcast_queue.put(msg)

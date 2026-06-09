@@ -24,13 +24,14 @@ LOG_LEVELS = {
 
 LOCATIONS = {
     "frontend": "UI / Frontend",
+    "webui": "WebUI / Frontend",
     "discord": "Discord",
     "smartspeaker": "Smart-Speaker",
 }
 
-SOURCES_ALL = ["frontend", "discord", "chatgpt", "reminder", "system", "debug", "internal", "thoughts"]
-SOURCES_CHAT = ["frontend", "discord", "chatgpt"]
-SOURCES_CONTEXT = ["frontend", "discord", "chatgpt", "reminder", "system", "internal", "thoughts"]
+SOURCES_ALL = ["frontend", "webui", "discord", "chatgpt", "reminder", "system", "debug", "internal", "thoughts"]
+SOURCES_CHAT = ["frontend", "webui", "discord", "chatgpt"]
+SOURCES_CONTEXT = ["frontend", "webui", "discord", "chatgpt", "reminder", "system", "internal", "thoughts"]
 
 
 
@@ -178,7 +179,7 @@ def is_conversation_active():
     collection = MONGO_CONVERSATION_COLLECTION
     docs = mongo.find_logs(
         collection_name=collection,
-        query={"source": "frontend"},
+        query={"source": {"$in": ["frontend", "webui"]}},
         limit=1,
         sort_field="timestamp",
         ascending=False,  # newest first

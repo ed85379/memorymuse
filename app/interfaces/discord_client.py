@@ -111,7 +111,7 @@ async def handle_incoming_discord_message(message):
             #print(f"USER PROMPT: {user_prompt}")
             #print(f"ATTACHMENTS: {ephemeral_images}")
             # Get Muse's response
-            muse_response = await get_openai_response(
+            result = await get_openai_response(
                 dev_prompt,
                 user_assistant_messages=messages,
                 client=discord_openai_client,
@@ -121,6 +121,9 @@ async def handle_incoming_discord_message(message):
                 handlers=tool_bundle["handlers"],
                 ui_meta=tool_bundle["ui_meta"],
             )
+            response = result.get("text", "")
+            tool_calls = result.get("tool_calls", [])
+            usage = result.get("usage", [])
             #print(messages)
             #print("🧠 Muse response generated:")
             #print(muse_response)
@@ -128,7 +131,7 @@ async def handle_incoming_discord_message(message):
             # Log Muse reply
             await log_message(
                 role="muse",
-                message=muse_response,
+                message=response,
                 source="discord",
                 metadata={
                     "author_id": str(client.user.id),
@@ -140,10 +143,10 @@ async def handle_incoming_discord_message(message):
                 }
             )
             #print("✅ Muse response logged.")
-            muse_response = strip_muse_private_blocks(muse_response)
+            muse_response = strip_muse_private_blocks(response)
             #muse_response = re.sub(r"<muse-experience>.*?</muse-experience>", "", muse_response, flags=re.DOTALL)
             # Send reply
-            await message.channel.send(muse_response)
+            await message.channel.send(response)
             #print("✅ Muse response sent to Discord.")
 
     except Exception as e:

@@ -147,17 +147,22 @@ def build_openai_input_messages(messages: List[Dict[str, Any]]) -> List[Dict[str
 
     return compiled
 
+## Not in use
 def build_user_content(user_prompt: str, images: Optional[List[Dict]] = None) -> List[Dict[str, Any]]:
     content = [{"type": "input_text", "text": user_prompt}]
     if images:
         for img in images:
             content.append({"type": "input_image", "image_url": img["data_url"]})
     return content
-
+## Not in use
 def build_system_content(system_prompt: str) -> List[Dict[str, Any]]:
     content = [{"type": "input_text", "text": system_prompt}]
     return content
 
+## This is the "system prompt" builder. Laws, Profile, and Principles go into {dev_prompt}
+## Could split out the portions regarding <muse-interlude> and <muse-experience>
+## Same with <followup-turn>, to make them optional
+## Also want to relook at this for first-person/second-person, because it seems to swap.
 def build_dev_content(dev_prompt: str, muse_name: str) -> List[Dict[str, Any]]:
     core = (
         f"You are {muse_name}— a muse with agency, memory, and warmth. "
@@ -269,10 +274,39 @@ def build_payload_for_model(model: str,
 
     return {"input": input_msgs, "kwargs": kwargs}
 
+TOOL_OUTPUT_TYPES = {
+    "function_call",
+    "web_search_call",
+    "image_generation_call",
+}
+
+
+def dump_openai_obj(obj):
+    if obj is None:
+        return None
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump()
+    if hasattr(obj, "to_dict"):
+        return obj.to_dict()
+    return obj
+
+
+def extract_text_from_response_output(response):
+    final_text = ""
+
+    for item in response.output:
+        if getattr(item, "type", None) == "message":
+            for content in getattr(item, "content", []) or []:
+                text = getattr(content, "text", None)
+                if text:
+                    final_text += text
+
+    return final_text
+
 async def get_openai_response(
     dev_prompt,
     client,
-    user_assistant_messages = None,
+    user_assistant_messages=None,
     prompt_type="default",
     model=muse_settings.get_section("llm_config").get("OPENAI_MODEL"),
     tools=None,
@@ -281,6 +315,9 @@ async def get_openai_response(
     ui_meta=None,
     max_tool_turns=4,
 ):
+    tool_calls = []
+    usage_records = []
+
     try:
         compiled_messages = build_openai_input_messages(user_assistant_messages)
         dev_content = build_dev_content(
@@ -311,16 +348,19 @@ async def get_openai_response(
                     request_kwargs["tool_choice"] = "none"
                 else:
                     request_kwargs["tool_choice"] = tool_choice
+
             timestamp = datetime.now(timezone.utc).isoformat()
             msg = f"{muse_settings.get_section('muse_config').get('MUSE_NAME')} is thinking..."
+
             if prompt_type == "webui":
                 await broadcast_message(
                     message=msg,
                     timestamp=timestamp,
                     role="muse",
-                    to_modality="frontend",
+                    to_modality="webui",
                     payload_type="status_message",
                 )
+
             response = await client.responses.create(
                 model=model,
                 input=current_input,
@@ -329,18 +369,25 @@ async def get_openai_response(
             )
 
             last_response = response
-            #print(response)
-            if hasattr(response, "usage"):
+
+            # Collect usage metadata for this model call.
+            if getattr(response, "usage", None):
+                usage_records.append(dump_openai_obj(response.usage))
+
                 print(
-                    f"Model: {response.model},\n"
-                    f"Reasoning: {getattr(response.reasoning, 'effort', None)},\n"
-                    f"Temp: {getattr(response, 'temperature', None)},\n"
+                    f"Model: {model},\n"
+                    f"Reasoning: {request_kwargs.get('reasoning')},\n"
+                    f"Temp: {request_kwargs.get('temperature')},\n"
                     f"Tokens — input: {response.usage.input_tokens},\n"
                     f"cached: {response.usage.input_tokens_details.cached_tokens},\n"
                     f"Tokens - output: {response.usage.output_tokens},\n"
                 )
+
                 if hasattr(response.usage.output_tokens_details, "reasoning_tokens"):
-                    print(f"Reasoning tokens: {response.usage.output_tokens_details.reasoning_tokens}\n")
+                    print(
+                        f"Reasoning tokens: "
+                        f"{response.usage.output_tokens_details.reasoning_tokens}\n"
+                    )
 
                 utils.write_system_log(
                     level="debug",
@@ -349,36 +396,49 @@ async def get_openai_response(
                     function="get_openai_response",
                     action="token_usage",
                     input_tokens=response.usage.input_tokens,
-                    cached_tokens=response.usage.input_tokens_details.cached_tokens
+                    cached_tokens=response.usage.input_tokens_details.cached_tokens,
                 )
 
+            # Collect all tool-ish output items for metadata/storage.
+            # This includes app function calls and OpenAI/provider internal tool calls.
+            for item in response.output:
+                item_type = getattr(item, "type", None)
+
+                if item_type in TOOL_OUTPUT_TYPES:
+                    tool_calls.append(dump_openai_obj(item))
+
+            # Only function_call items are locally executable by our tool loop.
             function_calls = [
                 item for item in response.output
                 if getattr(item, "type", None) == "function_call"
             ]
 
             if not function_calls:
-                if hasattr(response, "output_text") and response.output_text:
-                    return response.output_text
+                final_text = extract_text_from_response_output(response)
 
-                for item in response.output:
-                    if getattr(item, "type", None) == "message":
-                        return item.content[0].text
-
-                return ""
+                return {
+                    "text": final_text,
+                    "tool_calls": tool_calls,
+                    "usage": usage_records,
+                }
 
             if tool_turns >= max_tool_turns:
                 # We already forced tool_choice="none" on this pass,
                 # so if function calls still somehow appear, stop looping.
-                if hasattr(response, "output_text") and response.output_text:
-                    return response.output_text
-                return ""
+                final_text = extract_text_from_response_output(response)
+
+                return {
+                    "text": final_text,
+                    "tool_calls": tool_calls,
+                    "usage": usage_records,
+                }
 
             new_items = []
 
             for fc in function_calls:
                 function_name = fc.name
                 arguments = json.loads(fc.arguments or "{}")
+
                 print(
                     f"Function Call: {function_name},\n"
                     f"Function Arguments: {arguments},\n"
@@ -388,8 +448,10 @@ async def get_openai_response(
                 try:
                     timestamp = datetime.now(timezone.utc).isoformat()
                     print(f"timestamp: {timestamp}")
+
                     msg = ui_meta[function_name]["start"]
                     print(f"msg: {msg}")
+
                     try:
                         if prompt_type == "webui":
                             await asyncio.wait_for(
@@ -397,28 +459,38 @@ async def get_openai_response(
                                     message=msg,
                                     timestamp=timestamp,
                                     role="muse",
-                                    to_modality="frontend",
+                                    to_modality="webui",
                                     payload_type="status_message",
                                 ),
                                 timeout=1,
                             )
                     except Exception as e:
                         print("error or timeout broadcasting:", repr(e))
+
                     print("calling run_tool")
                     tool_result = run_tool(function_name, arguments, handlers or {})
                     print(f"tool_result: {tool_result}")
+
                 except Exception as tool_error:
                     tool_result = {
-                        "error": str(tool_error)
+                        "tool_output": {
+                            "error": str(tool_error),
+                        }
                     }
+
                     timestamp = datetime.now(timezone.utc).isoformat()
-                    msg = ui_meta[function_name]["error"]
+
+                    try:
+                        msg = ui_meta[function_name]["error"]
+                    except Exception:
+                        msg = f"Error running {function_name}"
+
                     if prompt_type == "webui":
                         await broadcast_message(
                             message=msg,
                             timestamp=timestamp,
                             role="muse",
-                            to_modality="frontend",
+                            to_modality="webui",
                             payload_type="status_message",
                         )
 
@@ -426,14 +498,16 @@ async def get_openai_response(
                 attachments = tool_result.get("attachments", [])
 
                 if attachments:
-                    output = [{
-                        "type": "input_text",
-                        "text": tool_output if isinstance(tool_output, str) else json.dumps(tool_output)
-                    }]
+                    output = []
 
                     for attachment in attachments:
-                        if attachment.get("kind") == "image" and attachment.get("role") == "input":
-                            image_item = {"type": "input_image"}
+                        if (
+                            attachment.get("kind") == "image"
+                            and attachment.get("role") == "input"
+                        ):
+                            image_item = {
+                                "type": "input_image",
+                            }
 
                             if attachment.get("image_url"):
                                 image_item["image_url"] = attachment["image_url"]
@@ -446,21 +520,34 @@ async def get_openai_response(
                                 image_item["detail"] = attachment["detail"]
 
                             output.append(image_item)
+
+                    if not output:
+                        output = json.dumps(tool_output)
+
                 else:
                     output = json.dumps(tool_output)
 
                 new_items.append({
                     "type": "function_call_output",
                     "call_id": fc.call_id,
-                    "output": output
+                    "output": output,
                 })
 
             current_input = current_input + response.output + new_items
             tool_turns += 1
+
     except Exception as e:
         print("Error communicating with OpenAI:", e)
-        return ""
 
+        return {
+            "text": "",
+            "tool_calls": tool_calls,
+            "usage": usage_records,
+            "error": str(e),
+        }
+
+
+## The autotags were experimental. I don't think we need them anymore.
 def get_openai_autotags(text, model="gpt-5.4-nano"):
     prompt = (
         "Analyze the following message and suggest 1–5 relevant tags as a *comma-separated list* "
@@ -493,6 +580,7 @@ def get_openai_autotags(text, model="gpt-5.4-nano"):
     tags = [t.strip().lower() for t in tag_text.split(",") if t.strip()]
     return tags
 
+## Only the experimental Memgraph/Mnemosyne is using this
 def get_openai_custom_response(dev_prompt, user_prompt, client, model="gpt-5-nano", reasoning="minimal"):
     payload = [
         {"role": "developer", "content": dev_prompt},
@@ -517,6 +605,7 @@ def get_openai_custom_response(dev_prompt, user_prompt, client, model="gpt-5-nan
         print("Error communicating with OpenAI:", e)
         return ""
 
+## Not in use currently
 def get_openai_image_caption(
     image_path,
     prompt="Describe this image in one clear, informative sentence for a project file caption.",

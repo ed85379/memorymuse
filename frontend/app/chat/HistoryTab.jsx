@@ -71,7 +71,7 @@ const HistoryTab = (
   }
 ) => {
   // Initial states
-  const [source, setSource] = useState("Frontend");
+  const [source, setSource] = useState("WebUI");
   const [historyMessages, setHistoryMessages] = useState([]);
 
   const [sourceStats, setSourceStats] = useState([]);
@@ -85,12 +85,13 @@ const HistoryTab = (
 
   const SOURCE_LABELS = {
     frontend: "Frontend",
+    webui: "WebUI",
     chatgpt: "Imported",
     discord: "Discord",
     // fallbacks for future sources
   };
 
-  const VISIBLE_SOURCES = new Set(["frontend", "chatgpt", "discord"]);
+  const VISIBLE_SOURCES = new Set(["frontend", "webui", "chatgpt", "discord"]);
 
   const availableSources = sourceStats
     .filter(s => VISIBLE_SOURCES.has(s.source))
@@ -100,7 +101,7 @@ const HistoryTab = (
       count: s.count,
     }));
 
-  const PREFERRED_DEFAULT = "frontend";
+  const PREFERRED_DEFAULT = "webui";
 
   useEffect(() => {
     if (!availableSources.length) return;

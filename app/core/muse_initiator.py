@@ -25,7 +25,7 @@ async def run_thread_summarization(
     print("Prompt built. Sending to model...")
     print(f"user_assist: {user_assistant_messages}")
     print(f"messages_meta: {messages_meta}")
-    response = await get_openai_response(
+    result = await get_openai_response(
         dev_prompt,
         client=continuity_openai_client,
         user_assistant_messages=user_assistant_messages,
@@ -36,15 +36,18 @@ async def run_thread_summarization(
         handlers=tool_bundle["handlers"],
         ui_meta=tool_bundle["ui_meta"],
     )
+    response = result.get("text", "")
+    tool_calls = result.get("tool_calls", [])
+    usage = result.get("usage", [])
 
 
-    result = apply_thread_summary(thread_id, response, messages_meta["extended_history"])
+    summarization_result = apply_thread_summary(thread_id, response, messages_meta["extended_history"])
 
     write_system_log(level="info", module="core", component="initiator", function="run_thread_summarization",
                            action="summarizer_response", response=response)
 
     print("Thread summarization response:", response[:200].replace("\n", " ") + ("..." if len(response) > 200 else ""))
-    return result
+    return summarization_result
 
 # </editor-fold>
 

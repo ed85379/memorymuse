@@ -9,7 +9,7 @@ from app.databases.mongo_connector import mongo_system, mongo
 from app.databases.memory_indexer import assign_message_id
 
 
-SOURCES_CHAT = ["frontend", "discord", "chatgpt"]
+SOURCES_CHAT = ["frontend", "webui", "discord", "chatgpt"]
 
 
 STATES_DOC = "states"

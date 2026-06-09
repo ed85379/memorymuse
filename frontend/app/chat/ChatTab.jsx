@@ -179,7 +179,7 @@ const ChatTab = (
       : '';
     const timestamp = toPythonIsoString();
     const role = "user";
-    const source = "frontend";
+    const source = "webui";
     const message = input + (filenamesBlock ? '\n' + filenamesBlock : '');
     // sets the project_id on the message immediately
     const project_id = (autoAssign && selectedProjectId) ? selectedProjectId : "";
@@ -254,8 +254,8 @@ const ChatTab = (
         auto_assign: autoAssign,
         blend_ratio: focus,
         injected_files: injectedFiles.map(f => f.id),
-        ephemeral_files: ephemeralPayload
-        source: "webui"
+        ephemeral_files: ephemeralPayload,
+        source: "webui",
         prompt_type: "webui"
       }),
     });
@@ -341,7 +341,7 @@ const ChatTab = (
     // sources: array of strings → multiple ?sources=... entries
     const srcs = sources && sources.length
       ? sources
-      : ["frontend", "reminder", "discovery", "initiative"];
+      : ["frontend", "webui", "reminder", "discovery", "initiative"];
 
     srcs.forEach(src => params.append("sources", src));
 

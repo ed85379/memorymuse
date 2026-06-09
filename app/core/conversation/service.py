@@ -18,7 +18,7 @@ from app.databases.memory_indexer import assign_message_id
 async def handle_conversation_turn(data: dict, client):
     ## Shared client fields
     user_input = data.get("prompt", "")
-    source = data.get("source", "frontend")
+    source = data.get("source", "webui")
     to_modality = data.get("to_modality", source)
     prompt_type = data.get("prompt_type", "webui")
 
@@ -138,6 +138,7 @@ async def handle_conversation_turn(data: dict, client):
         to_modality=to_modality,
     )
 
+
     if not final_text.strip():
         # Only commands were present; nothing to display
         return
@@ -150,6 +151,10 @@ async def handle_conversation_turn(data: dict, client):
         "role": "muse",
         "source": source,
         "to": to_modality,
+        "metadata": {
+            "usage": result.usage,
+            "tool_calls": result.tool_calls,
+        },
     }
 
     muse_message_id = assign_message_id(muse_msg)

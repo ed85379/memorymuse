@@ -405,7 +405,7 @@ export default function ChatPage() {
 
       const tryRegister = () => {
         if (ws.readyState === 1) {
-          ws.send(JSON.stringify({ listen_as: "frontend" }));
+          ws.send(JSON.stringify({ listen_as: "webui" }));
           setConnecting(false);
         } else if (!cancelled) {
           setTimeout(tryRegister, 50);

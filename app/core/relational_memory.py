@@ -699,7 +699,7 @@ class RelationalMemory:
         """
         # Replace this list eventually with a global list later. Will also be used
         # other subsystems that doesn't need non-chat messages.
-        chat_sources = ["chatgpt", "frontend", "discord", "smartspeaker"]
+        chat_sources = ["chatgpt", "webui", "frontend", "discord", "smartspeaker"]
         query = {}
 
         if message_ids:

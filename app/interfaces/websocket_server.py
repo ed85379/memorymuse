@@ -16,6 +16,7 @@ class ClientConnection:
 # Maintain separate connection pools by modality
 active_connections: Dict[str, List[ClientConnection]] = {
     "frontend": [],
+    "webui": [],
     "speaker": [],
     "discord": [],
 }
@@ -25,13 +26,16 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
         init_msg = await websocket.receive_json()
-        modality = init_msg.get("listen_as", "frontend")
+        modality = init_msg.get("listen_as", "webui")
         print(f"New {modality} connection")
 
         client = ClientConnection(websocket=websocket, modality=modality)
 
         # Default subscriptions by modality
         if modality == "frontend":
+            # global UI + chat by default
+            client.channels.update({"muse-actions", "muse-chat", "muse-thread"})
+        elif modality == "webui":
             # global UI + chat by default
             client.channels.update({"muse-actions", "muse-chat", "muse-thread"})
         elif modality == "speaker":
@@ -51,13 +55,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
             action = msg.get("action")
 
-            if modality == "frontend" and action in ("subscribe", "unsubscribe"):
+            if modality == "webui" and action in ("subscribe", "unsubscribe"):
                 new_channels = set(msg.get("channels", []))
                 if action == "subscribe":
                     client.channels.update(new_channels)
                 else:
                     client.channels.difference_update(new_channels)
-                print(f"[frontend] {action} {new_channels}, now: {client.channels}")
+                print(f"[webui] {action} {new_channels}, now: {client.channels}")
                 continue
 
             # fallback echo
@@ -77,7 +81,7 @@ async def broadcast_message(
     timestamp: str,
     role: str,
     *,
-    to_modality: str = "frontend",
+    to_modality: str = "webui",
     channels: Set[str] | None = None,
     project_id: str = "",
     thread_id: str = "",
@@ -90,7 +94,7 @@ async def broadcast_message(
     msg_dict = {
         "timestamp": timestamp,
         "role": role,
-        "source": "frontend",
+        "source": "webui",
         "message": message,
     }
 
