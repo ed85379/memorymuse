@@ -14,6 +14,7 @@ from app.api.routers.import_api import router as import_router
 from app.api.routers.projects_api import router as projects_router
 from app.api.routers.files_api import router as files_router
 from app.api.routers.threads_api import router as threads_router
+from app.api.routers.assets_api import router as assets_router
 from app.core.reminders.router import router as reminders_router
 from app.core.scheduler.router import router as scheduler_router
 from .queues import run_broadcast_queue, run_log_queue, run_index_queue, run_memory_index_queue, run_purge_queue, \
@@ -49,6 +50,7 @@ app.include_router(profile_router)
 app.include_router(muse_router)
 app.include_router(time_skip_router)
 app.include_router(threads_router)
+app.include_router(assets_router)
 app.include_router(reminders_router)
 app.include_router(scheduler_router)
 

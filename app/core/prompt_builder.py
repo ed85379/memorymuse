@@ -446,50 +446,18 @@ class PromptBuilder:
         return file_attachments
 
     def add_ephemeral_files(self, ephemeral_files):
-        project_root = Path(__file__).resolve().parent.parent.parent
-        ephemeral_files_dir = project_root / "ephemeral_images"
-        ephemeral_files_dir.mkdir(parents=True, exist_ok=True)
-
         self.ephemeral_files = []
-        file_blocks = []
 
         for file_obj in ephemeral_files:
-            original_name = file_obj.get("name", "untitled")
+            filename = file_obj.get("name", "untitled")
             mime_type = file_obj.get("type", "")
-            encoding = file_obj.get("encoding")
             raw_data = file_obj.get("data", "")
 
-            #if mime_type.startswith("image/") and encoding == "base64":
-            ext = mime_type.split("/")[-1].lower()
-            if ext == "jpeg":
-                ext = "jpg"
-
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            unique = uuid.uuid4().hex[:8]
-            stored_name = f"file_{stamp}_{unique}.{ext}"
-            stored_path = ephemeral_files_dir / stored_name
-
-            image_bytes = base64.b64decode(raw_data)
-            stored_path.write_bytes(image_bytes)
-
-            ephemeral_url = f"ephemeral://{stored_name}"
-            data_url = f"data:{mime_type};base64,{raw_data}"
-
             self.ephemeral_files.append({
-                "filename": stored_name,
-                "original_name": original_name,
-                "path": str(stored_path),
-                "ephemeral_url": ephemeral_url,
-                "data_url": data_url,
+                "filename": filename,
                 "file_data": raw_data,
                 "mime_type": mime_type,
             })
-
-            file_blocks.append(f"[IMAGE FILE: {ephemeral_url}]")
-
-        ephemeral_block = ""
-        if file_blocks:
-            ephemeral_block = "[Ephemeral Files]\n" + "\n".join(file_blocks)
 
         return self.ephemeral_files
 

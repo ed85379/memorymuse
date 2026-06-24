@@ -5,7 +5,7 @@ import re, json
 import humanize
 from html import unescape
 from typing import Any, Dict, List, Iterator, NamedTuple, Optional, TypedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from app.core.utils import (write_system_log,
                             build_command_response_block,
@@ -733,10 +733,11 @@ def normalize_muse_experience_tags(text: str) -> str:
 @dataclass
 class RouteUserInputResult:
     response_text: str
-    cmd_results: list
-    usage: dict
+    cmd_results: list = field(default_factory=list)
+    usage: list = field(default_factory=list)
     followup_turn: str | None = None
-    tool_calls: dict | None = None
+    tool_calls: list = field(default_factory=list)
+    assets: list = field(default_factory=list)
 
 async def route_user_input(
         dev_prompt: str,
@@ -762,8 +763,10 @@ async def route_user_input(
     response = result.get("text", "")
     tool_calls = result.get("tool_calls", [])
     usage = result.get("usage", [])
+    assets = result.get("assets", [])
     print(f"\nDEBUG Tool Calls:\n{tool_calls}\n\n")
     print(f"\nDEBUG usage:\n{usage}\n\n")
+    print(f"\nDEBUG assets:\n{assets}\n\n")
     # Normalize muse-experience tags outside of fenced code blocks
     response = normalize_muse_experience_tags(response)
 
@@ -805,7 +808,8 @@ async def route_user_input(
         cmd_results=cmd_results,
         usage=usage,
         followup_turn=followup_result["intent"],
-        tool_calls=tool_calls
+        tool_calls=tool_calls,
+        assets=assets,
     )
 
 # Handles muse_initiator-specific responses

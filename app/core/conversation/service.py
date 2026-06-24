@@ -14,6 +14,7 @@ from app.api.queues import broadcast_queue, log_queue
 from app.interfaces.websocket_server import broadcast_message
 from app.core.threads_core import get_thread_type
 from app.databases.memory_indexer import assign_message_id
+from app.core.assets_core import create_local_asset_from_base64
 
 async def handle_conversation_turn(data: dict, client):
     ## Shared client fields
@@ -118,6 +119,54 @@ async def handle_conversation_turn(data: dict, client):
     if thread_id:
         user_msg["thread_id"] = thread_id
 
+    if ephemeral_files:
+        asset_refs = []
+
+        for index, file_obj in enumerate(ephemeral_files):
+            name = file_obj.get("name") or "untitled"
+            mimetype = file_obj.get("type") or "application/octet-stream"
+
+            asset_doc = create_local_asset_from_base64(
+                asset_id=file_obj.get("asset_id"),
+                data=file_obj.get("data") or "",
+                filename=name,
+                mimetype=mimetype,
+                source_type="chat_upload",
+                project_ids=[project_id] if project_id else None,
+                message_ids=None,
+                provenance={
+                    "source_type": "chat_upload",
+                    "original_filename": name,
+                    "uploaded_via": source,
+                    "ingested_at": datetime.now(timezone.utc).isoformat(),
+                },
+                lifecycle={
+                    "permanent": False,
+                },
+                #max_bytes=DEFAULT_MAX_UPLOAD_BYTES,  # if you have one
+            )
+
+            asset_id = asset_doc.get("asset_id") or asset_doc.get("_id") or file_obj.get("asset_id")
+
+            asset_refs.append({
+                "asset_id": asset_id,
+                "asset_type": asset_doc.get("asset_type"),
+                "mimetype": asset_doc.get("mimetype") or mimetype,
+                "filename": asset_doc.get("filename") or name,
+                "display_name": asset_doc.get("display_name") or name,
+                "size": asset_doc.get("size") or file_obj.get("size"),
+                "role": file_obj.get("role") or "attachment",
+                "display": file_obj.get("display") or (
+                    "inline" if mimetype.startswith("image/") else "download"
+                ),
+                "order": file_obj.get("order", index),
+                "source_type": "chat_upload",
+                "bytes_status": "available",
+            })
+
+        user_msg.setdefault("metadata", {})
+        user_msg["metadata"]["assets"] = asset_refs
+
     if broadcast_user:
         await broadcast_queue.put(user_msg)
 
@@ -154,6 +203,7 @@ async def handle_conversation_turn(data: dict, client):
         "metadata": {
             "usage": result.usage,
             "tool_calls": result.tool_calls,
+            "assets": result.assets,
         },
     }
 
@@ -180,6 +230,15 @@ async def handle_conversation_turn(data: dict, client):
 
     return {"response": broadcast_text}
 
+def merge_turn_results(primary, secondary):
+    primary.usage.extend(secondary.usage)
+    primary.tool_calls.extend(secondary.tool_calls)
+    primary.assets.extend(secondary.assets)
+
+    for index, asset in enumerate(primary.assets):
+        asset["order"] = index
+
+    return primary
 
 def normalize_project_id(project_id):
     if isinstance(project_id, str) and not project_id.strip():
@@ -302,6 +361,8 @@ async def run_model_turns_with_optional_followup(
 
         if followup_result.response_text.strip():
             final_text += "\n\n***\n\n" + followup_result.response_text.strip()
+
+        result = merge_turn_results(result, followup_result)
 
     return result, final_text
 

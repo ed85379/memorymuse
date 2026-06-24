@@ -38,3 +38,4 @@ pgeocode
 astral
 moonshine-voice
 fal_client
+werkzeug

@@ -19,7 +19,7 @@ import ThreadPanel from "@/components/app/ThreadPanel";
 import { Toggle } from "@/components/ui/toggle"
 import { IconToggleButton } from "@/components/ui/icon-toggle-button"
 // Utils
-import { assignMessageId, toPythonIsoString, fileToBase64, trimMessages } from '@/utils/utils';
+import { assignMessageId, toPythonIsoString, fileToBase64, trimMessages, generateAssetId, inferAssetTypeFromMime } from '@/utils/utils';
 
 // Icons
 import {
@@ -165,13 +165,8 @@ const ChatTab = (
       console.error("Error refreshing time_skip:", err);
     }
 
-
     const allFiles = [
       ...injectedFiles,
-      ...ephemeralFiles.map(f => ({
-        name: f.name,
-        type: f.type,
-      }))
     ];
 
     const filenamesBlock = allFiles.length
@@ -185,14 +180,45 @@ const ChatTab = (
     const project_id = (autoAssign && selectedProjectId) ? selectedProjectId : "";
     const thread_id = threadId
     const ephemeralPayload = await Promise.all(
-      ephemeralFiles.map(async (f) => ({
-        name: f.name,
-        type: f.type,
-        size: f.size,
-        data: await fileToBase64(f.file),
-        encoding: "base64"
-      }))
+      ephemeralFiles.map(async (f, index) => {
+        const asset_id = await generateAssetId(); // or sync crypto helper
+
+        let data;
+        try {
+          data = await fileToBase64(f.file);
+        } catch (err) {
+          console.error("Failed reading ephemeral file", index, f, err);
+          throw err;
+        }
+
+        return {
+          asset_id,
+          name: f.name,
+          type: f.type,
+          size: f.size,
+          data: data,
+          encoding: "base64",
+          role: "attachment",
+          display: "inline",
+          order: index
+        };
+      })
     );
+
+    const optimisticAssets = ephemeralPayload.map((f, index) => ({
+      asset_id: f.asset_id,
+      asset_type: inferAssetTypeFromMime(f.type),
+      mimetype: f.type,
+      filename: f.name,
+      display_name: f.name,
+      size: f.size,
+      role: "attachment",
+      display: f.type?.startsWith("image/") ? "inline" : "download",
+      order: index,
+      source_type: "chat_upload",
+      bytes_status: "pending",
+      preview_url: f.preview_url,
+    }));
 
     // 1. Generate the message_id (async)//
     const message_id = await assignMessageId({
@@ -215,6 +241,9 @@ const ChatTab = (
           source,
           project_id,
           thread_ids: [threadId],
+          metadata: {
+            assets: optimisticAssets
+          }
         }
       ], ACTIVE_WINDOW_LIMIT)
     );
@@ -231,6 +260,9 @@ const ChatTab = (
               source,
               project_id,
               thread_ids: [threadId],
+              metadata: {
+                assets: optimisticAssets
+              }
             }
           ], ACTIVE_WINDOW_LIMIT)
         );

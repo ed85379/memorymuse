@@ -92,3 +92,7 @@ recall_tests/
 dupe_pairs.txt
 failed_message_ids.txt
 frontend/public/iris-new.jpg
+storage/*
+!storage/.gitkeep
+storage/assets/*
+!storage/assets/.gitkeep

@@ -24,12 +24,71 @@ export function toPythonIsoString(date = new Date()) {
 
 export async function fileToBase64(file) {
   return new Promise((resolve, reject) => {
+    if (!file) {
+      reject(new Error("fileToBase64 called with no file"));
+      return;
+    }
+
     const reader = new FileReader();
-    reader.onload = () =>
-      resolve(reader.result.split(',')[1]); // Strips the data:...;base64, prefix
-    reader.onerror = error => reject(error);
+
+    reader.onload = () => {
+      const result = reader.result;
+
+      if (typeof result !== "string") {
+        reject(new Error("FileReader result was not a string"));
+        return;
+      }
+
+      const commaIndex = result.indexOf(",");
+      if (commaIndex === -1) {
+        reject(new Error("FileReader result did not contain a base64 prefix"));
+        return;
+      }
+
+      resolve(result.slice(commaIndex + 1)); // Strips the data:...;base64, prefix
+    };
+
+    reader.onerror = () => {
+      reject(reader.error || new Error("FileReader failed"));
+    };
+
+    reader.onabort = () => {
+      reject(new Error("FileReader aborted"));
+    };
+
     reader.readAsDataURL(file);
   });
+}
+
+export function generateAssetId() {
+  return `asset_${crypto.randomUUID().replaceAll("-", "")}`;
+}
+
+export function inferAssetTypeFromMime(mimetype = "") {
+  const mime = mimetype.toLowerCase();
+
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("video/")) return "video";
+  if (mime === "application/pdf") return "document";
+  if (mime.startsWith("text/")) return "document";
+
+  const documentMimes = new Set([
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/rtf",
+    "application/json",
+    "application/xml",
+    "text/csv",
+  ]);
+
+  if (documentMimes.has(mime)) return "document";
+
+  return "file";
 }
 
 export function trimMessages(arr, limit) {

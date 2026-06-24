@@ -111,6 +111,93 @@ function GmNote({ gmType, text }) {
   );
 }
 
+function MessageAsset({ asset }) {
+  if (asset.mimetype?.startsWith("image/")) {
+    return <ImageAsset asset={asset} />;
+  }
+
+  return <FileAsset asset={asset} />;
+}
+
+function ImageAsset({ asset }) {
+  const src = `/api/assets/${asset.asset_id}/content`;
+  const filename =
+    asset.display_name || asset.filename || "attached-image";
+
+  const aspectRatio =
+    asset.width && asset.height
+      ? `${asset.width} / ${asset.height}`
+      : undefined;
+
+  return (
+    <figure className="message-image-asset">
+      <a
+        className="message-image-link"
+        href={src}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Open image in new tab"
+      >
+        <div
+          className="message-image-frame"
+          style={{ aspectRatio }}
+        >
+          <img
+            src={src}
+            alt={filename}
+            loading="lazy"
+          />
+        </div>
+      </a>
+
+      <figcaption className="message-asset-caption">
+        <span className="message-asset-name">{filename}</span>
+
+        <span className="message-asset-actions">
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open
+          </a>
+
+          <a
+            href={src}
+            download={filename}
+          >
+            Download
+          </a>
+        </span>
+      </figcaption>
+    </figure>
+  );
+}
+
+function FileAsset({ asset }) {
+  const href = `/api/assets/${asset.asset_id}/content`;
+
+  return (
+    <a className="message-file-asset" href={href} download>
+      <span className="file-icon">
+        {iconForMimetype(asset.mimetype)}
+      </span>
+
+      <span className="file-info">
+        <span className="file-name">
+          {asset.display_name || asset.filename || asset.asset_id}
+        </span>
+
+        {asset.size && (
+          <span className="file-size">
+            {formatBytes(asset.size)}
+          </span>
+        )}
+      </span>
+    </a>
+  );
+}
+
 // --- 3. Main MessageItem ---
 
 const MessageItem = React.memo(
@@ -417,13 +504,23 @@ const MessageItem = React.memo(
                 );
               }
 
-            if (block.type === "gm") {
-              return <GmNote key={idx} text={block.text} />;
-            }
+              if (block.type === "gm") {
+                return <GmNote key={idx} text={block.text} />;
+              }
 
               return null;
             })}
+            {msg.metadata?.assets?.length > 0 && (
+              <div className="message-assets">
+                {[...msg.metadata.assets]
+                  .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                  .map((asset) => (
+                    <MessageAsset key={asset.asset_id} asset={asset} />
+                  ))}
+              </div>
+            )}
           </div>
+
           <TTSController
             msg={msg}
             audioControls={audioControls}

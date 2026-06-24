@@ -303,6 +303,17 @@ def extract_text_from_response_output(response):
 
     return final_text
 
+def collect_assets_from_tool_result(tool_result: dict) -> list[dict]:
+    tool_assets = tool_result.get("assets") or []
+
+    if isinstance(tool_assets, list):
+        return tool_assets
+
+    if isinstance(tool_assets, dict):
+        return [tool_assets]
+
+    return []
+
 async def get_openai_response(
     dev_prompt,
     client,
@@ -317,6 +328,7 @@ async def get_openai_response(
 ):
     tool_calls = []
     usage_records = []
+    assets = []
 
     try:
         compiled_messages = build_openai_input_messages(user_assistant_messages)
@@ -420,6 +432,7 @@ async def get_openai_response(
                     "text": final_text,
                     "tool_calls": tool_calls,
                     "usage": usage_records,
+                    "assets": assets,
                 }
 
             if tool_turns >= max_tool_turns:
@@ -431,6 +444,7 @@ async def get_openai_response(
                     "text": final_text,
                     "tool_calls": tool_calls,
                     "usage": usage_records,
+                    "assets": assets,
                 }
 
             new_items = []
@@ -449,7 +463,11 @@ async def get_openai_response(
                     timestamp = datetime.now(timezone.utc).isoformat()
                     print(f"timestamp: {timestamp}")
 
-                    msg = ui_meta[function_name]["start"]
+                    msg = (
+                        (ui_meta or {})
+                        .get(function_name, {})
+                        .get("start", f"Running {function_name}...")
+                    )
                     print(f"msg: {msg}")
 
                     try:
@@ -481,7 +499,11 @@ async def get_openai_response(
                     timestamp = datetime.now(timezone.utc).isoformat()
 
                     try:
-                        msg = ui_meta[function_name]["error"]
+                        msg = (
+                            (ui_meta or {})
+                            .get(function_name, {})
+                            .get("error", f"Error running {function_name}")
+                        )
                     except Exception:
                         msg = f"Error running {function_name}"
 
@@ -493,6 +515,10 @@ async def get_openai_response(
                             to_modality="webui",
                             payload_type="status_message",
                         )
+
+                tool_assets = collect_assets_from_tool_result(tool_result)
+                if tool_assets:
+                    assets.extend(tool_assets)
 
                 tool_output = tool_result["tool_output"]
                 attachments = tool_result.get("attachments", [])
@@ -543,6 +569,7 @@ async def get_openai_response(
             "text": "",
             "tool_calls": tool_calls,
             "usage": usage_records,
+            "assets": assets,
             "error": str(e),
         }
 
