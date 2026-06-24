@@ -347,7 +347,7 @@ async def handle_send_reminders(payload, source="reminder", reminders=None, **kw
     if not text:
         return "Missing text for send_reminders command"
 
-    to = payload.get("to", "frontend")
+    to = payload.get("to", "webui")
     timestamp = datetime.now(timezone.utc).isoformat()
 
     # Build the internal data block
