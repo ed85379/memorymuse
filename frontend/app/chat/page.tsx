@@ -424,6 +424,7 @@ export default function ChatPage() {
             const project_id = data.project_id;
             const thread_id = data.thread_id;
             const timestamp = data.timestamp;
+            const metadata = data.metadata;
 
             const incoming = {
               role,
@@ -431,7 +432,8 @@ export default function ChatPage() {
               message_id,
               timestamp,
               project_id,
-              thread_ids: thread_id ? [thread_id] : []
+              thread_ids: thread_id ? [thread_id] : [],
+              metadata
             };
 
             setMessages(prev => {
@@ -470,6 +472,7 @@ export default function ChatPage() {
             const project_id = data.project_id;
             const thread_id = data.thread_id;
             const timestamp = data.timestamp;
+            const metadata = data.metadata;
 
             const incoming = {
               role,
@@ -477,7 +480,8 @@ export default function ChatPage() {
               message_id,
               timestamp,
               project_id,
-              thread_ids: thread_id ? [thread_id] : []
+              thread_ids: thread_id ? [thread_id] : [],
+              metadata,
             };
 
             setMessages(prev => {

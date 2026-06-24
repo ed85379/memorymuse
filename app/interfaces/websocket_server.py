@@ -87,6 +87,7 @@ async def broadcast_message(
     thread_id: str = "",
     message_id: str = "",
     payload_type: str = "muse_message",
+    metadata: dict = None,
 ):
     if channels is None:
         channels = {"muse-chat"}  # default lane for plain messages
@@ -104,7 +105,6 @@ async def broadcast_message(
 
     connections = active_connections.get(to_modality, [])
     print(f"Broadcasting {payload_type} to {to_modality} on {channels} ({len(connections)} clients)")
-
     for client in list(connections):
         try:
             if client.channels.intersection(channels):
@@ -117,6 +117,7 @@ async def broadcast_message(
                     "thread_id": thread_id,
                     "channels": list(channels),
                     "timestamp": timestamp,
+                    "metadata": metadata,
                 }))
         except Exception:
             connections.remove(client)
