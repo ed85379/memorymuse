@@ -47,7 +47,8 @@ def scheduler_jitter(interval: int) -> int:
     return (
         random.randint(1, max(90, interval // 4))
         if interval >= 300
-        else random.randint(1, 15)
+        else 0
+        #else random.randint(1, 15)
     )
 
 
