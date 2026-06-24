@@ -151,7 +151,7 @@ TOOL_REGISTRY = {
         "schema": {
             "type": "function",
             "name": "read_webpage",
-            "description": "Fetch and read the text content of a specific webpage when you already have a URL. Use this to inspect the contents of a page, article, or documentation link. Do not use it for general discovery; use search_web first if you need to find the right page.",
+            "description": "Fetch and read the text content of a specific webpage when you already have a URL. Use this to inspect the contents of a page, article, or documentation link. Do not use it for general discovery; use search_web first if you need to find the right page. After reading a webpage, consider whether to call `search_memory` in semantic mode using focused terms from the page content. This can recover prior conversation context that the user's original message would not have triggered. Use this especially for analysis, project work, job/application help, recommendations, or personalized responses; avoid it for simple summaries or one-off factual checks.",
             "parameters": {
                 "type": "object",
                 "properties": {
