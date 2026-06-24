@@ -30,7 +30,8 @@ async def run_broadcast_queue(
                 project_id=msg.get("project_id", ""),
                 thread_id=msg.get("thread_id", ""),
                 message_id=msg.get("message_id", ""),
-                payload_type=msg.get("payload_type", "muse_message")
+                payload_type=msg.get("payload_type", "muse_message"),
+                metadata=msg.get("metadata") or {},
             )
         except Exception as e:
             utils.write_system_log(
