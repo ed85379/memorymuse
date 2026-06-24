@@ -62,12 +62,14 @@ class MongoConnector:
     def insert_logs_bulk(self, collection_name, log_entries):
         self.db[collection_name].insert_many(log_entries)
 
-    def find_documents(self, collection_name, query=None, projection=None, sort=None, sort_field=None, limit=None):
+    def find_documents(self, collection_name, query=None, projection=None, sort=None, sort_field=None, limit=None, skip=None):
         cursor = self.db[collection_name].find(query or {}, projection)
         if sort_field:
             cursor = cursor.sort(sort_field, sort if sort is not None else 1)  # 1=ASC, -1=DESC
         if limit:
             cursor = cursor.limit(limit)
+        if skip:
+            cursor = cursor.skip(skip)
         return list(cursor)
 
     def find_one_document(self, collection_name, query=None, projection=None):
