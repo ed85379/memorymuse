@@ -174,18 +174,107 @@ function ImageAsset({ asset }) {
   );
 }
 
+function iconForMimetype(mimetype = "", filename = "") {
+  const type = mimetype.toLowerCase();
+  const name = filename.toLowerCase();
+
+  if (type.startsWith("image/")) return "🖼️";
+  if (type.startsWith("audio/")) return "🎵";
+  if (type.startsWith("video/")) return "🎬";
+  if (type.startsWith("text/")) return "📄";
+
+  if (type === "application/pdf" || name.endsWith(".pdf")) {
+    return "📕";
+  }
+
+  if (
+    type.includes("zip") ||
+    type.includes("compressed") ||
+    name.endsWith(".zip") ||
+    name.endsWith(".tar") ||
+    name.endsWith(".gz") ||
+    name.endsWith(".7z") ||
+    name.endsWith(".rar")
+  ) {
+    return "🗜️";
+  }
+
+  if (
+    type.includes("json") ||
+    type.includes("javascript") ||
+    type.includes("xml") ||
+    type.includes("html") ||
+    name.endsWith(".js") ||
+    name.endsWith(".jsx") ||
+    name.endsWith(".ts") ||
+    name.endsWith(".tsx") ||
+    name.endsWith(".json") ||
+    name.endsWith(".html") ||
+    name.endsWith(".css") ||
+    name.endsWith(".py") ||
+    name.endsWith(".md")
+  ) {
+    return "💻";
+  }
+
+  if (
+    type.includes("word") ||
+    type.includes("officedocument.wordprocessingml") ||
+    name.endsWith(".doc") ||
+    name.endsWith(".docx")
+  ) {
+    return "📝";
+  }
+
+  if (
+    type.includes("excel") ||
+    type.includes("spreadsheet") ||
+    name.endsWith(".xls") ||
+    name.endsWith(".xlsx") ||
+    name.endsWith(".csv")
+  ) {
+    return "📊";
+  }
+
+  if (
+    type.includes("powerpoint") ||
+    type.includes("presentation") ||
+    name.endsWith(".ppt") ||
+    name.endsWith(".pptx")
+  ) {
+    return "📽️";
+  }
+
+  return "📎";
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1
+  );
+
+  const value = bytes / Math.pow(1024, index);
+
+  return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
 function FileAsset({ asset }) {
   const href = `/api/assets/${asset.asset_id}/content`;
+  const displayName = asset.display_name || asset.filename || asset.asset_id;
 
   return (
     <a className="message-file-asset" href={href} download>
       <span className="file-icon">
-        {iconForMimetype(asset.mimetype)}
+        {iconForMimetype(asset.mimetype, displayName)}
       </span>
 
       <span className="file-info">
         <span className="file-name">
-          {asset.display_name || asset.filename || asset.asset_id}
+          {displayName}
         </span>
 
         {asset.size && (

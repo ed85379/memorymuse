@@ -184,6 +184,28 @@ body {
   text-decoration: underline;
 }
 
+.message-file-asset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.message-file-asset .file-info {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.message-file-asset .file-name {
+  font-weight: 500;
+}
+
+.message-file-asset .file-size {
+  opacity: 0.7;
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
 /* Make the DayPicker a bit more compact */
 .rdp-custom {
   --rdp-cell-size: 1.8rem;      /* default is ~2.75rem */
