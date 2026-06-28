@@ -269,6 +269,16 @@ def normalize_mimetype(content_type: str | None) -> str | None:
     # Strip charset/etc: "image/png; charset=utf-8" -> "image/png"
     return content_type.split(";", 1)[0].strip().lower() or None
 
+DEFAULT_DOWNLOAD_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0 Safari/537.36"
+    ),
+    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "close",
+}
 
 def download_asset_url(
     url: str,
@@ -276,6 +286,7 @@ def download_asset_url(
     timeout_seconds: int = DEFAULT_DOWNLOAD_TIMEOUT_SECONDS,
     max_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
     allowed_mimetype_prefixes: tuple[str, ...] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> DownloadedAsset:
     """
     Download a remote asset into memory for local ingestion.
@@ -287,7 +298,18 @@ def download_asset_url(
     - optional allowed mimetype prefixes, e.g. ("image/",)
     """
 
-    with requests.get(url, timeout=timeout_seconds, stream=True) as response:
+    request_headers = {
+        **DEFAULT_DOWNLOAD_HEADERS,
+        **(headers or {}),
+    }
+
+    with requests.get(
+        url,
+        timeout=timeout_seconds,
+        stream=True,
+        headers=request_headers,
+        allow_redirects=True,
+    ) as response:
         response.raise_for_status()
 
         final_url = response.url
@@ -322,15 +344,21 @@ def download_asset_url(
 
             if total > max_bytes:
                 raise ValueError(
-                    f"Remote asset exceeded max download size: {total} bytes > {max_bytes} bytes"
+                    f"Remote asset exceeded max download size: "
+                    f"{total} bytes > {max_bytes} bytes"
                 )
 
             chunks.append(chunk)
 
         file_bytes = b"".join(chunks)
 
+        if not file_bytes:
+            raise ValueError("Remote asset downloaded as empty response body")
+
         filename = (
-            filename_from_content_disposition(response.headers.get("Content-Disposition"))
+            filename_from_content_disposition(
+                response.headers.get("Content-Disposition")
+            )
             or filename_from_url(final_url)
             or filename_from_url(url)
         )
