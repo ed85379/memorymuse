@@ -681,7 +681,7 @@ class PromptBuilder:
                            extended_history=False,
                            unsummarized_only=True,
                            public: bool = False,
-                           proj_code_intensity="mixed",
+                           proj_code_intensity="MIXED",
                            sources=utils.SOURCES_CONTEXT,
                            ):
         # Pull recents
@@ -897,13 +897,6 @@ class PromptBuilder:
                 "extended_history": extended_history_meta,
             },
         }
-
-    def add_recent_context(self, sources=None, public: bool = False):
-        entries = memory_core.get_immediate_context(sources=sources, public=public)
-        project_lookup = utils.build_project_lookup()
-        if entries:
-            formatted = "\n\n".join(utils.format_context_entry(e, project_lookup=project_lookup) for e in entries)
-            #self.segments["conversation_context"] = f"[Recent Context]\n\n{formatted}"
 
     def build_state_system_message(
             self,

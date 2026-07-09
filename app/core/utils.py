@@ -278,7 +278,7 @@ def normalize_role(role: str) -> str:
 def format_context_entry(
         e,
         project_lookup=None,
-        proj_code_intensity="mixed",
+        proj_code_intensity="MIXED",
         purpose=None,
         search_memory_id=None,
 ):

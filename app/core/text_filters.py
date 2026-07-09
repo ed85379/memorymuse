@@ -128,7 +128,7 @@ class TextFilterConfig:
     json_replace_marker: str = "/// JSON BLOCK REMOVED FOR BREVITY ///"
 
     # --- Block XML (e.g. <command-response>, <internal-data>) ---
-    xml_block_mode: XmlBlockMode = XmlBlockMode.REMOVE
+    xml_block_mode: XmlBlockMode = XmlBlockMode.KEEP
     # Tags whose entire blocks should be removed when xml_block_mode=REMOVE
     xml_block_tags: tuple[str, ...] = (
         "command-response",
@@ -353,7 +353,7 @@ SEARCH_EMBEDDING_HEAVYCODE_CFG = TextFilterConfig(
 CONTEXT_RECENT_NOCODE_CFG = TextFilterConfig(
     json_mode="disabled",
     xml_block_mode=XmlBlockMode.KEEP,
-    xml_tag_strip_mode=XmlTagStripMode.STRIP,
+    xml_tag_strip_mode=XmlTagStripMode.KEEP,
     code_enabled=True,
     code_mode=CodeBlockFilterMode.REPLACE,
     code_min_lines_for_filter=0,
