@@ -216,7 +216,10 @@ def build_payload_for_model(model: str,
         "gpt-5.3-chat-latest",
         "gpt-5-nano",
         "gpt-5.4-nano",
-        "gpt-5.5"
+        "gpt-5.5",
+        "gpt-5.6-luna",
+        "gpt-5.6-terra",
+        "gpt-5.6-sol",
     }
 
     CHAT_MODELS_WITH_CACHE_RETENTION = {
