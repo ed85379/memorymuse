@@ -1,12 +1,19 @@
 from pathlib import Path
-
-from fastapi import APIRouter, HTTPException, Query
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form, Body
 from fastapi.responses import FileResponse
-
+from datetime import datetime, timezone
 from app.config import ASSET_STORAGE_ROOT, MONGO_ASSETS_COLLECTION
 from app.databases.mongo_connector import mongo
-from app.core.assets_core import list_assets
-
+from app.core.assets_core import (
+    list_assets,
+    AssetLifecycle,
+    create_local_asset_from_bytes,
+    index_asset_text_for_recall,
+    is_text_asset_mimetype,
+    mark_asset_recall_indexed,
+    asset_for_ui,
+)
 
 router = APIRouter(
     prefix="/api/assets",
@@ -118,3 +125,53 @@ async def get_asset_content(
         media_type=mimetype,
         filename=filename if as_attachment else None,
     )
+
+@router.post("/upload")
+async def upload_asset(
+    file: UploadFile = File(...),
+    project_ids: list[str] = Form(default=[]),
+    index_for_recall: bool = Form(False),
+):
+    data = await file.read()
+
+    if not data:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    mimetype = file.content_type or "application/octet-stream"
+    filename = file.filename or "uploaded-file"
+
+    try:
+        asset_doc = create_local_asset_from_bytes(
+            file_bytes=data,
+            filename=filename,
+            mimetype=mimetype,
+            source_type="user_upload",
+            project_ids=project_ids or [],
+            lifecycle=AssetLifecycle(
+                status="available",
+                permanent=True,
+            ),
+            provenance={
+                "source": "files_manager_upload",
+            },
+        )
+
+        if index_for_recall and is_text_asset_mimetype(mimetype, filename):
+            message_ids = await index_asset_text_for_recall(asset_doc)
+            await mark_asset_recall_indexed(asset_doc["_id"], message_ids)
+
+            # Keep returned doc in sync without needing to re-query Mongo.
+            asset_doc.setdefault("indexing", {})
+            asset_doc["indexing"].update({
+                "recall_indexed": True,
+                "indexed_on": datetime.now(timezone.utc),
+                "message_ids": message_ids,
+                "num_chunks": len(message_ids),
+            })
+
+        return {"asset": asset_for_ui(asset_doc)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Asset upload failed: {e}")

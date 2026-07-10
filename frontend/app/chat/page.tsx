@@ -132,7 +132,7 @@ export default function ChatPage() {
   // ------------------------------------
 
   // ------------------------------------
-  // Projects and Threads States and Functions
+  // Projects, Threads, Assets States and Functions
   // ------------------------------------
   const [projects, setProjects] = useState([]);
   const [projectMap, setProjectMap] = useState({});
@@ -142,7 +142,10 @@ export default function ChatPage() {
   const initialOpenThreadId = uiStates?.threads?.open_thread_id ?? "";
   const [openThreadId, setOpenThreadId] = useState(initialOpenThreadId);
   const [threadManagerOpen, setThreadManagerOpen] = useState(false)
-
+  const [assets, setAssets] = useState([]);
+  const [assetsLoading, setAssetsLoading] = useState(true);
+  const [assetsRefreshing, setAssetsRefreshing] = useState(true);
+  const [assetsError, setAssetsError] = useState(null);
 
   const fetchProjects = async () => {
     const res = await fetch("/api/projects");
@@ -159,6 +162,65 @@ export default function ChatPage() {
     setProjectMap({ projects: Object.fromEntries((data.projects || []).map(p => [p._id, p])), files });
   };
   useEffect(() => { fetchProjects(); }, []);
+
+  const fetchAssets = useCallback(async ({ quiet = false } = {}) => {
+    if (quiet) {
+      setAssetsRefreshing(true);
+    } else {
+      setAssetsLoading(true);
+    }
+    setAssetsError(null);
+
+    try {
+      const res = await fetch(`/api/assets/?lifecycle_status=available&limit=200`);
+
+      if (!res.ok) {
+        throw new Error(`Failed to load assets: HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      // Be forgiving while the API shape evolves.
+      setAssets(data.assets || data.items || data.results || []);
+    } catch (e) {
+      console.error(e);
+      setAssetsError(e.message || "Failed to load assets.");
+      setAssets([]);
+    } finally {
+      setAssetsLoading(false);
+      setAssetsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAssets();
+  }, [fetchAssets]);
+
+  const assetsByProjectId = useMemo(() => {
+    const map = {};
+
+    for (const asset of assets || []) {
+      const assetId = asset.asset_id || asset._id;
+
+      for (const projectId of asset.project_ids || []) {
+        if (!map[projectId]) map[projectId] = [];
+
+        map[projectId].push({
+          id: assetId,
+          name:
+            asset.display_name ||
+            asset.filename ||
+            asset.name ||
+            asset.original_filename ||
+            assetId,
+          size: asset.size_bytes || asset.size,
+          asset,
+        });
+      }
+    }
+
+    return map;
+  }, [assets]);
 
   const fetchThreads = async () => {
     const res = await fetch("/api/threads/");
@@ -1049,6 +1111,9 @@ export default function ChatPage() {
               projectMap={projectMap}
               selectedProjectId={selectedProjectId}
               setSelectedProjectId={setSelectedProjectId}
+              assetsByProjectId={assetsByProjectId}
+              assetsLoading={assetsLoading}
+              fetchAssets={fetchAssets}
               focus={focus}
               setFocus={setFocus}
               autoAssign={autoAssign}

@@ -5,11 +5,11 @@ import base64
 import binascii
 from bson import ObjectId
 from dataclasses import dataclass
-from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 from uuid import uuid4
+from datetime import datetime, timezone, timedelta, UTC
 
 import requests
 from werkzeug.utils import secure_filename
@@ -17,6 +17,8 @@ from werkzeug.utils import secure_filename
 from app.config import ASSET_STORAGE_ROOT
 from app.config import MONGO_ASSETS_COLLECTION
 from app.databases.mongo_connector import mongo
+from app.core.utils import chunk_file
+from app.core.memory_core import log_message
 
 
 AssetLifecycleStatus = Literal[
@@ -684,6 +686,7 @@ def asset_doc_to_listing_item(asset: dict) -> dict:
     indexing = asset.get("indexing") or {}
     dimensions = asset.get("dimensions") or {}
     storage = asset.get("storage") or {}
+    provenance = asset.get("provenance") or {}
 
     return {
         "asset_id": asset_id,
@@ -701,6 +704,11 @@ def asset_doc_to_listing_item(asset: dict) -> dict:
             "status": lifecycle.get("status"),
             "permanent": lifecycle.get("permanent"),
             "expires_at": lifecycle.get("expires_at"),
+            "created_at": lifecycle.get("created_at"),
+        },
+
+        "provenance": {
+            "ingested_at": provenance.get("ingested_at"),
         },
 
         "storage": {
@@ -743,16 +751,13 @@ def build_asset_list_query(
         query["asset_type"] = asset_type
 
     if project_id:
-        try:
-            project_oid = ObjectId(project_id)
-        except Exception:
-            raise ValueError("Invalid project_id")
+        project_id = str(project_id).strip()
 
         if project_mode in (None, "only"):
-            query["project_ids"] = project_oid
+            query["project_ids"] = {"$in": [project_id]}
 
         elif project_mode == "exclude":
-            query["project_ids"] = {"$ne": project_oid}
+            query["project_ids"] = {"$nin": [project_id]}
 
         else:
             raise ValueError(
@@ -763,17 +768,19 @@ def build_asset_list_query(
         if project_mode is None:
             pass
 
-        elif project_mode == "general":
+        elif project_mode == "unscoped":
             query["$or"] = [
                 {"project_ids": {"$exists": False}},
                 {"project_ids": {"$size": 0}},
                 {"project_ids": None},
             ]
 
-        elif project_mode == "linked":
+        elif project_mode == "attached":
             query["project_ids"] = {"$exists": True, "$ne": []}
 
         elif project_mode in ("only", "exclude"):
+            # Used by "Attach File" / asset picker flows:
+            # show assets not already attached to this project, including unscoped assets.
             raise ValueError(
                 "project_mode='only' or 'exclude' requires project_id"
             )
@@ -876,3 +883,171 @@ def find_living_asset_by_source_url(
         query["asset_type"] = asset_type
 
     return mongo.find_one_document(MONGO_ASSETS_COLLECTION, query)
+
+
+def chunk_timestamp_for_batch(base_ts: datetime, chunk_index: int) -> datetime:
+    return base_ts + timedelta(milliseconds=chunk_index)
+
+async def index_asset_text_for_recall(asset_doc: dict) -> list[str]:
+    from app.api.queues import log_queue
+    from app.databases.memory_indexer import assign_message_id
+
+    file_bytes = read_asset_bytes(asset_doc)
+    chunks = chunk_file(file_bytes)
+
+    base_ts = datetime.now(timezone.utc).replace(microsecond=0)
+    message_ids = []
+
+    for chunk in chunks:
+        chunk_index = chunk["index"]
+        timestamp = chunk_timestamp_for_batch(base_ts, chunk_index)
+
+        entry = {
+            "timestamp": timestamp,
+            "role": "system",
+            "message": chunk["content"],
+            "source": "asset_text_chunk",
+            "metadata": {
+                "asset_id": str(asset_doc["_id"]),
+                "filename": asset_doc.get("filename"),
+                "display_name": asset_doc.get("display_name"),
+                "mimetype": asset_doc.get("mimetype"),
+                "source_type": asset_doc.get("source_type"),
+                "chunk_index": chunk_index,
+                "start_line": chunk.get("start_line"),
+                "end_line": chunk.get("end_line"),
+                "start_byte": chunk.get("start_byte"),
+                "end_byte": chunk.get("end_byte"),
+            },
+            "project_ids": asset_doc.get("project_ids", []),
+        }
+
+        message_id = assign_message_id({
+            "timestamp": entry["timestamp"],
+            "role": entry["role"],
+            "source": entry["source"],
+            "message": entry["message"],
+        })
+
+        await log_queue.put(entry)
+        message_ids.append(message_id)
+
+    return message_ids
+
+def is_text_asset_mimetype(mimetype: str | None, filename: str | None = None) -> bool:
+    mimetype = (mimetype or "").lower()
+    filename = (filename or "").lower()
+
+    if mimetype.startswith("text/"):
+        return True
+
+    text_mimetypes = {
+        "application/json",
+        "application/xml",
+        "application/javascript",
+        "application/x-javascript",
+        "application/typescript",
+        "application/x-yaml",
+        "application/yaml",
+        "application/csv",
+        "application/sql",
+        "application/rtf",
+        "application/x-sh",
+        "application/x-python-code",
+    }
+
+    if mimetype in text_mimetypes:
+        return True
+
+    text_extensions = {
+        ".txt",
+        ".md",
+        ".markdown",
+        ".json",
+        ".jsonl",
+        ".csv",
+        ".tsv",
+        ".xml",
+        ".html",
+        ".htm",
+        ".css",
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".py",
+        ".sql",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".conf",
+        ".log",
+    }
+
+    return any(filename.endswith(ext) for ext in text_extensions)
+
+async def mark_asset_recall_indexed(asset_id: str, message_ids: list[str]) -> None:
+    now = datetime.now(timezone.utc)
+
+    mongo.update_one_document(
+        MONGO_ASSETS_COLLECTION,
+        {"_id": asset_id},
+        {
+            "indexing.recall_indexed": True,
+            "indexing.indexed_on": now,
+            "indexing.message_ids": message_ids,
+            "indexing.num_chunks": len(message_ids),
+            "indexing.status": "indexed",
+        },
+    )
+
+def asset_for_ui(asset_doc: dict) -> dict:
+    asset_id = str(asset_doc.get("_id"))
+
+    storage = asset_doc.get("storage") or {}
+    lifecycle = asset_doc.get("lifecycle") or {}
+    indexing = asset_doc.get("indexing") or {}
+
+    return {
+        "_id": asset_id,
+
+        "filename": asset_doc.get("filename"),
+        "display_name": asset_doc.get("display_name") or asset_doc.get("filename"),
+        "mimetype": asset_doc.get("mimetype"),
+        "size": asset_doc.get("size"),
+
+        "asset_type": asset_doc.get("asset_type"),
+        "source_type": asset_doc.get("source_type"),
+
+        "project_ids": asset_doc.get("project_ids", []),
+        "message_ids": asset_doc.get("message_ids", []),
+        "thread_ids": asset_doc.get("thread_ids", []),
+
+        "storage": {
+            "backend": storage.get("backend"),
+            "bytes_status": storage.get("bytes_status"),
+            "sha256": storage.get("sha256"),
+        },
+
+        "lifecycle": {
+            "status": lifecycle.get("status"),
+            "permanent": lifecycle.get("permanent"),
+            "expires_at": lifecycle.get("expires_at"),
+            "purge_after": lifecycle.get("purge_after"),
+        },
+
+        "indexing": {
+            "recall_indexed": indexing.get("recall_indexed", False),
+            "indexed_on": indexing.get("indexed_on"),
+            "message_ids": indexing.get("message_ids", []),
+            "num_chunks": indexing.get("num_chunks", 0),
+            "status": indexing.get("status"),
+        },
+
+        # These assume you have/will have these routes.
+        # Adjust paths to match your asset API.
+        "content_url": f"/api/assets/{asset_id}/content",
+        "download_url": f"/api/assets/{asset_id}/download",
+    }

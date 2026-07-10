@@ -33,6 +33,9 @@ export default function TabbedToolPanel(
     projectMap,
     selectedProjectId,
     setSelectedProjectId,
+    assetsByProjectId,
+    assetsLoading,
+    fetchAssets,
     focus,
     setFocus,
     autoAssign,
@@ -89,6 +92,9 @@ export default function TabbedToolPanel(
             projectMap={projectMap}
             selectedProjectId={selectedProjectId}
             setSelectedProjectId={setSelectedProjectId}
+            assetsByProjectId={assetsByProjectId}
+            assetsLoading={assetsLoading}
+            fetchAssets={fetchAssets}
             focus={focus}
             setFocus={setFocus}
             autoAssign={autoAssign}

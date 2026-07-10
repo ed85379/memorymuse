@@ -35,6 +35,7 @@ if (loading || adminLoading || userLoading ) return null; // or a spinner, or a 
 const allTabs = [
   { name: "Chat", path: "/chat" },
   { name: "Projects", path: "/projects", },
+  { name: "Files", path: "/files" },
   { name: "Journal", path: "/journal", muse_feature: "ENABLE_JOURNAL"  },
   { name: "Memory", path: "/memory" },
   //{ name: "Muse", path: "/muse" },

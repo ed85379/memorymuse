@@ -25,6 +25,7 @@ from app.addon_loader.loader import load_addons
 from app.core.commands.core_commands import register_core_commands
 from app.core.commands.registry import command_registry
 from app.core.tools.core_tools import register_core_tools
+from app.core.tools.openai_image_gen_tools import register_tools as register_core_image_tools
 from app.core.tools.registry import tool_registry
 from app.core.scheduler.scheduler_core import start_scheduler, stop_scheduler
 from app.core.reminders.scheduler_tasks import register_scheduler_tasks as register_reminders_schedule
@@ -62,6 +63,7 @@ register_reminder_commands(command_registry)
 # Register core tools
 app.state.tool_registry = tool_registry
 register_core_tools(tool_registry)
+#register_core_image_tools(tool_registry)
 
 # Register core schedules
 register_reminders_schedule()

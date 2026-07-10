@@ -14,6 +14,7 @@ from app.core.states_core import (
     clear_time_skip,
     update_thread_state,
     update_nav_state,
+    update_files_state,
     get_active_time_skip_window,
     )
 
@@ -178,6 +179,16 @@ def set_nav_state(payload: dict):
     try:
         result = update_nav_state(payload)
         return {"status": "ok", "nav": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@states_router.patch("/files")
+def set_files_state(payload: dict):
+    try:
+        result = update_files_state(payload)
+        return {"status": "ok", "files": result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:

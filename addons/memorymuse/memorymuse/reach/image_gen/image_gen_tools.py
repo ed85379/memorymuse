@@ -1,5 +1,13 @@
 
 import os
+from datetime import datetime
+
+from app.core.assets_core import (
+    AssetLifecycle,
+    AssetProvenance,
+    create_local_asset_from_url,
+    asset_doc_to_ref,
+)
 from app.config import muse_settings
 
 muse_name = muse_settings.get_section('muse_config').get('MUSE_NAME')
@@ -10,6 +18,7 @@ def generate_image(
     image_size=None,
     seed=None,
     sources=None,
+    project_id=None,
 ):
     os.environ["FAL_KEY"] = muse_settings.get_section("api_keys").get("FAL_API_KEY")
     import fal_client
@@ -61,15 +70,15 @@ def generate_image(
         model_path = "fal-ai/bytedance/seedream/v4.5/text-to-image"
         mode = "text_to_image"
 
-    result = fal_client.subscribe(
+    fal_response = fal_client.subscribe(
         model_path,
         arguments=arguments,
         with_logs=True,
         on_queue_update=on_queue_update,
     )
-    print(result)
+    print(fal_response)
 
-    images = result.get("images", [])
+    images = fal_response.get("images", [])
     if not images:
         raise ValueError("fal returned no images")
 
@@ -92,7 +101,7 @@ def generate_image(
         "explicit": explicit,
         "image_size": image_size,
         "seed_input": seed,
-        "seed_output": result.get("seed"),
+        "seed_output": fal_response.get("seed"),
         "sources": normalized_sources,
         "content_type": first_image.get("content_type"),
         "file_name": first_image.get("file_name"),
@@ -101,6 +110,41 @@ def generate_image(
         "height": first_image.get("height"),
     }
 
+    provenance = AssetProvenance(
+        source_type="generated",
+        ingested_at=datetime.utcnow(),
+        created_by_tool="generate_image",
+        provider="fal.ai",
+        model=model_path,
+        original_url=image_url,
+        prompt=prompt,
+        explicit=explicit,
+        seed=seed,
+        image_size=image_size,
+        source_images=image_urls,
+        provider_response=fal_response,
+    )
+
+    asset_doc = create_local_asset_from_url(
+        url=image_url,
+        filename=None,
+        mimetype=None,
+        source_type="generated",
+        project_ids=[project_id] if project_id else None,
+        message_ids=None,
+        provenance=provenance,
+        lifecycle=AssetLifecycle(permanent=True),
+        allowed_mimetype_prefixes=("image/",),
+    )
+
+    asset_ref = asset_doc_to_ref(
+        asset_doc,
+        role="generated_output",
+        display="inline",
+        order=0,
+        source_tool="generate_image",
+    )
+
     if explicit:
         return {
             "tool_output": (
@@ -108,9 +152,10 @@ def generate_image(
                 f"Prompt: {prompt}\n"
                 f"Mode: {mode}\n"
                 f"URL: {image_url}\n"
-                f"Note: Display the image directly into your response using markdown."
+                f"Note: The image will be automatically displayed in your response."
             ),
             "attachments": [],
+            "assets": [asset_ref],
             "metadata": metadata,
         }
     else:
@@ -120,13 +165,14 @@ def generate_image(
                 f"Prompt: {prompt}\n"
                 f"Mode: {mode}\n"
                 f"URL: {image_url}\n"
-                f"Note: Display the image directly into your response using markdown."
+                f"Note: The image will be automatically displayed in your response."
             ),
             "attachments": [attachment],
+            "assets": [asset_ref],
             "metadata": metadata,
         }
 
-def generate_muse_image(prompt, explicit: bool = False):
+def generate_muse_image(prompt, explicit: bool = False, project_id=None):
     os.environ["FAL_KEY"] = muse_settings.get_section("api_keys").get("FAL_API_KEY")
     import fal_client
 
@@ -135,21 +181,24 @@ def generate_muse_image(prompt, explicit: bool = False):
             for log in update.logs:
                 print(log["message"])
 
-    result = fal_client.subscribe(
-        "fal-ai/bytedance/seedream/v4.5/edit",
+    model_path = "fal-ai/bytedance/seedream/v4.5/edit"
+    source_images = [
+        "https://i.imgur.com/CldK93c.jpeg"
+    ]
+
+    fal_response = fal_client.subscribe(
+        model_path,
         arguments={
             "prompt": prompt,
-            "image_urls": [
-                "https://i.imgur.com/CldK93c.jpeg",
-            ],
+            "image_urls": source_images,
             "enable_safety_checker": not explicit,
         },
         with_logs=True,
         on_queue_update=on_queue_update,
     )
-    print(result)
+    print(fal_response)
 
-    images = result.get("images", [])
+    images = fal_response.get("images", [])
     if not images:
         raise ValueError("fal returned no images")
 
@@ -163,15 +212,66 @@ def generate_muse_image(prompt, explicit: bool = False):
         "image_url": image_url,
     }
 
+    first_image = images[0]
+
+    metadata = {
+        "mode": "edit",
+        "model": model_path,
+        "prompt": prompt,
+        "explicit": explicit,
+        "seed_output": fal_response.get("seed"),
+        "content_type": first_image.get("content_type"),
+        "file_name": first_image.get("file_name"),
+        "file_size": first_image.get("file_size"),
+        "width": first_image.get("width"),
+        "height": first_image.get("height"),
+    }
+
+    provenance = AssetProvenance(
+        source_type="generated",
+        ingested_at=datetime.utcnow(),
+        created_by_tool="generate_muse_image",
+        provider="fal.ai",
+        model=model_path,
+        original_url=image_url,
+        prompt=prompt,
+        explicit=explicit,
+        provider_response=fal_response,
+    )
+
+    asset_doc = create_local_asset_from_url(
+        url=image_url,
+        filename=None,
+        mimetype=None,
+        source_type="generated",
+        project_ids=[project_id] if project_id else None,
+        message_ids=None,
+        provenance=provenance,
+        lifecycle=AssetLifecycle(permanent=True),
+        allowed_mimetype_prefixes=("image/",),
+    )
+
+    asset_ref = asset_doc_to_ref(
+        asset_doc,
+        role="generated_output",
+        display="inline",
+        order=0,
+        source_tool="generate_image",
+    )
+
     if explicit:
         return {
             "tool_output": f"[Requested image generated]\nPrompt: {prompt}\nURL: {image_url}\nNote: Display the image directly into your response using markdown.",
             "attachments": [],
+            "assets": [asset_ref],
+            "metadata": metadata,
         }
     else:
         return {
             "tool_output": f"[Requested image generated and attached for viewing]\nPrompt: {prompt}\nURL: {image_url}\nNote: Display the image directly into your response using markdown.",
             "attachments": [attachment],
+            "assets": [asset_ref],
+            "metadata": metadata,
         }
 
 

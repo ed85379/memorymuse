@@ -395,3 +395,26 @@ def update_nav_state(payload: dict):
     )
 
     return updated.get("nav", {})
+
+def update_files_state(payload: dict):
+    allowed_keys = {"source_type", "asset_type", "lifecycle", "order_by"}
+    updates = {}
+
+    for key, value in payload.items():
+        if key not in allowed_keys:
+            continue
+
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"{key} must be a string or null.")
+        updates[f"files.{key}"] = value
+
+    if not updates:
+        raise ValueError("No valid files state fields to update.")
+
+    updated = mongo_system.update_one_document(
+        collection_name=MONGO_STATES_COLLECTION,
+        filter_query={"type": STATES_DOC},  # your fixed states doc locator
+        update_data=updates
+    )
+
+    return updated.get("files", {})

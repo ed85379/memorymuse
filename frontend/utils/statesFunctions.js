@@ -31,3 +31,8 @@ export function updateNavState(updates) {
 export function updateThreadsState(updates) {
   return patchStates("threads", updates);
 }
+
+// Files / filters and sorting
+export function updateFilesState(updates) {
+  return patchStates("files", updates);
+}

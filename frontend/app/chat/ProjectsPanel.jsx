@@ -9,6 +9,9 @@ export default function ProjectsPanel({
   fetchProjects,
   selectedProjectId,
   setSelectedProjectId,
+  assetsByProjectId,
+  assetsLoading,
+  fetchAssets,
   focus,
   setFocus,
   autoAssign,
@@ -196,7 +199,67 @@ export default function ProjectsPanel({
               );
             })}
             {(!filesLoading && files.length === 0) && (
-              <li className="text-neutral-500">No files in this project yet.</li>
+              <li className="text-neutral-500">No legacy files in this project.</li>
+            )}
+          </ul>
+
+          {/* New assets */}
+          <ul className="mt-3 space-y-1 border-t border-neutral-800 pt-3">
+            {(assetsByProjectId[project._id] || []).map(assetFile => {
+              const injected = isInjected(assetFile.id);
+              const pinned = isPinned(assetFile.id);
+
+              return (
+                <li key={assetFile.id} className="flex items-center gap-2 text-neutral-200">
+                  <span className="flex-1">
+                    {assetFile.name}
+                    {assetFile.size ? (
+                      <span className="ml-2 text-neutral-500 text-xs">
+                        {humanFileSize(assetFile.size)}
+                      </span>
+                    ) : null}
+                    <span className="ml-2 rounded bg-purple-900/40 px-1.5 py-0.5 text-[10px] text-purple-200">
+                      asset
+                    </span>
+                  </span>
+
+                  <button
+                    className={`px-2 py-0.5 rounded text-xs font-semibold
+                      ${injected
+                        ? "bg-purple-600 text-purple-100"
+                        : "bg-neutral-800 text-purple-300 hover:bg-purple-600 hover:text-purple-100"
+                      }`}
+                    onClick={() => handleInjectToggle(assetFile.id, assetFile.name)}
+                    type="button"
+                  >
+                    {injected ? "Injected" : "Inject"}
+                  </button>
+
+                  <button
+                    className={`px-2 py-0.5 rounded text-xs font-semibold flex items-center
+                      ${pinned
+                        ? "bg-purple-700 text-purple-100 border border-purple-300"
+                        : "bg-neutral-700 text-purple-200 hover:bg-purple-600 hover:text-purple-100"
+                      }
+                      ${!injected ? "opacity-50 cursor-not-allowed" : ""}
+                    `}
+                    onClick={() => injected && handlePinToggle(assetFile.id)}
+                    disabled={!injected}
+                    type="button"
+                    aria-label={pinned ? `Unpin ${assetFile.name}` : `Pin ${assetFile.name}`}
+                    title={pinned ? "Unpin file" : "Pin file"}
+                  >
+                    <Pin
+                      className={`w-4 h-4 ${pinned ? "text-purple-200" : "text-purple-400"}`}
+                      strokeWidth={2}
+                    />
+                  </button>
+                </li>
+              );
+            })}
+
+            {(!assetsLoading && (assetsByProjectId[project._id] || []).length === 0) && (
+              <li className="text-neutral-500">No asset files in this project yet.</li>
             )}
           </ul>
         </div>
