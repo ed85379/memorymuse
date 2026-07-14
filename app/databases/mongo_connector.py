@@ -94,6 +94,17 @@ class MongoConnector:
             return_document=ReturnDocument.AFTER
         )
 
+    def update_many_documents(self, collection_name, filter_query, update_data):
+        """
+        Apply a Mongo update document to every matching document.
+
+        Returns PyMongo's UpdateResult, including matched_count and modified_count.
+        """
+        return self.db[collection_name].update_many(
+            filter_query,
+            update_data,
+        )
+
     def delete_one_document(self, collection_name, query):
         return self.db[collection_name].delete_one(query)
 
