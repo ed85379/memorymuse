@@ -30,7 +30,7 @@ LOCATIONS = {
     "asset_text_chunk": "Uploaded Asset",
 }
 
-SOURCES_ALL = ["frontend", "webui", "discord", "chatgpt", "reminder", "system", "debug", "internal", "thoughts"]
+SOURCES_ALL = ["frontend", "webui", "discord", "chatgpt", "reminder", "system", "debug", "internal", "thoughts", "file", "asset_text_chunk"]
 SOURCES_CHAT = ["frontend", "webui", "discord", "chatgpt"]
 SOURCES_CONTEXT = ["frontend", "webui", "discord", "chatgpt", "reminder", "system", "internal", "thoughts"]
 
