@@ -217,8 +217,11 @@ async def update_qdrant_metadata_for_messages(message_ids: List[str]):
             "is_hidden": 1,
             "is_deleted": 1,
             "project_id": 1,
+            "project_ids": 1,
             "remembered": 1,
             "thread_ids": 1,
+            "metadata": 1,
+            "source": 1,
             # include anything else you want mirrored into Qdrant payload
         },
     )
@@ -230,14 +233,18 @@ async def update_qdrant_metadata_for_messages(message_ids: List[str]):
     updates = []
     for doc in docs:
         msg_id = doc["message_id"]
+        metadata = doc.get("metadata") or {}
 
         payload = {
             "message_id": msg_id,
+            "source": doc.get("source"),
+            "asset_id": metadata.get("asset_id"),
             "user_tags": doc.get("user_tags", []),
             "is_private": doc.get("is_private", False),
             "is_hidden": doc.get("is_hidden", False),
             "is_deleted": doc.get("is_deleted", False),
             "project_id": qdrant_connector.safe_str(doc.get("project_id")),
+            "project_ids": doc.get("project_ids", []),
             "remembered": doc.get("remembered", False),
             "thread_ids": doc.get("thread_ids", []),
         }

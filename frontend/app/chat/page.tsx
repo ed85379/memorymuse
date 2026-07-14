@@ -214,9 +214,23 @@ export default function ChatPage() {
             asset.original_filename ||
             assetId,
           size: asset.size_bytes || asset.size,
+          source_type: asset.source_type,
           asset,
         });
       }
+    }
+
+    return map;
+  }, [assets]);
+
+  const assetsById = useMemo(() => {
+    const map = {};
+
+    for (const asset of assets || []) {
+      const assetId = asset.asset_id || asset._id;
+      if (!assetId) continue;
+
+      map[assetId] = asset;
     }
 
     return map;
@@ -627,6 +641,7 @@ export default function ChatPage() {
   const [focus, setFocus] = useState(0.5);
   const [autoAssign, setAutoAssign] = useState(false);
   const [injectedFiles, setInjectedFiles] = useState([]);
+  const [injectedAssets, setInjectedAssets] = useState([]);
 
   // Ephemeral file controls
   const [ephemeralFiles, setEphemeralFiles] = useState([]);
@@ -640,6 +655,7 @@ export default function ChatPage() {
       setProject(null);
 
       setInjectedFiles([]);
+      setInjectedAssets([]);
       return;
     }
     // 1. Load project metadata
@@ -649,6 +665,7 @@ export default function ChatPage() {
         setProject(data.project || data);
 
         setInjectedFiles([]);
+        setInjectedAssets([]);
       });
 
     // 2. Load effective UI state for this project
@@ -710,6 +727,13 @@ export default function ChatPage() {
     setInjectedFiles(prev =>
       prev.map(f =>
         f.id === fid ? { ...f, pinned: !f.pinned } : f
+      )
+    );
+  };
+  const handleAssetPinToggle = aid => {
+    setInjectedAssets(prev =>
+      prev.map(a =>
+        a.id === aid ? { ...a, pinned: !a.pinned } : a
       )
     );
   };
@@ -1058,8 +1082,13 @@ export default function ChatPage() {
               autoAssign={autoAssign}
               injectedFiles={injectedFiles}
               files={files}
+              assetsByProjectId={assetsByProjectId}
+              assetsById={assetsById}
               setInjectedFiles={setInjectedFiles}
+              injectedAssets={injectedAssets}
+              setInjectedAssets={setInjectedAssets}
               handlePinToggle={handlePinToggle}
+              handleAssetPinToggle={handleAssetPinToggle}
               onCreateThread={handleCreateThread}
               onJoinThread={handleJoinThread}
               onLeaveThread={handleLeaveThread}
@@ -1112,6 +1141,7 @@ export default function ChatPage() {
               selectedProjectId={selectedProjectId}
               setSelectedProjectId={setSelectedProjectId}
               assetsByProjectId={assetsByProjectId}
+              assetsById={assetsById}
               assetsLoading={assetsLoading}
               fetchAssets={fetchAssets}
               focus={focus}
@@ -1120,6 +1150,8 @@ export default function ChatPage() {
               setAutoAssign={setAutoAssign}
               injectedFiles={injectedFiles}
               setInjectedFiles={setInjectedFiles}
+              injectedAssets={injectedAssets}
+              setInjectedAssets={setInjectedAssets}
               fetchFiles={fetchFiles}
               files={files}
               setFiles={setFiles}
@@ -1127,6 +1159,7 @@ export default function ChatPage() {
               setFilesLoading={setFilesLoading}
               filesError={filesError}
               handlePinToggle={handlePinToggle}
+              handleAssetPinToggle={handleAssetPinToggle}
             />
             </div>
           </div>
@@ -1173,8 +1206,13 @@ export default function ChatPage() {
               autoAssign={autoAssign}
               injectedFiles={injectedFiles}
               files={files}
+              assetsByProjectId={assetsByProjectId}
+              assetsById={assetsById}
               setInjectedFiles={setInjectedFiles}
+              injectedAssets={setInjectedAssets}
+              setInjectedAssets={setInjectedAssets}
               handlePinToggle={handlePinToggle}
+              handleAssetPinToggle={handleAssetPinToggle}
 
               // Message Actions
               createThreadWithMessages={createThreadWithMessages}
@@ -1228,13 +1266,18 @@ export default function ChatPage() {
               setAutoAssign={setAutoAssign}
               injectedFiles={injectedFiles}
               setInjectedFiles={setInjectedFiles}
+              injectedAssets={injectedAssets}
+              setInjectedAssets={setInjectedAssets}
               fetchFiles={fetchFiles}
               files={files}
+              assetsByProjectId={assetsByProjectId}
+              assetsById={assetsById}
               setFiles={setFiles}
               filesLoading={filesLoading}
               setFilesLoading={setFilesLoading}
               filesError={filesError}
               handlePinToggle={handlePinToggle}
+              handleAssetPinToggle={handleAssetPinToggle}
             />
             </div>
           </div>

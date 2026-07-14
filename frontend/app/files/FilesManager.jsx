@@ -20,6 +20,9 @@ import {
 } from "lucide-react";
 import { useConfig } from '@/hooks/ConfigContext';
 import { updateFilesState } from "@/utils/statesFunctions";
+import {
+  DeleteDialog,
+} from "@/components/app/Dialogs";
 
 function humanFileSize(bytes) {
   if (bytes === null || bytes === undefined || Number.isNaN(Number(bytes))) {
@@ -564,7 +567,7 @@ function UploadAssetDialog({
   );
 }
 
-function AssetCard({ asset }) {
+function AssetCard({ asset, onDeleted }) {
   const assetId = normalizeAssetId(asset);
   const displayName = getAssetDisplayName(asset);
   const sourceType = getSourceType(asset);
@@ -577,6 +580,40 @@ function AssetCard({ asset }) {
   const thumbnailUrl = getAssetContentUrl(asset, "thumbnail");
   const openUrl = getAssetContentUrl(asset, "display");
   const downloadUrl = getAssetContentUrl(asset, "original", true);
+
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingAsset, setDeletingAsset] = useState(null);
+
+  const handleDeleteOpen = (asset) => {
+    setDeletingAsset(asset);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingAsset) return;
+
+    const assetId = normalizeAssetId(deletingAsset);
+
+    if (!assetId) {
+      console.error("Cannot delete asset with no asset ID:", deletingAsset);
+      return;
+    }
+
+    const res = await fetch(`/api/assets/${assetId}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to delete asset: HTTP ${res.status}`);
+    }
+
+    setDeleteDialogOpen(false);
+    setDeletingAsset(null);
+
+    await onDeleted?.();
+  };
+
 
   return (
     <div className="group flex min-h-[320px] flex-col overflow-hidden rounded-xl border border-zinc-800 bg-[#11111f] shadow-lg shadow-black/20 transition hover:border-violet-500/50 hover:bg-[#151526]">
@@ -702,15 +739,25 @@ function AssetCard({ asset }) {
 
           <button
             type="button"
-            disabled
+            onClick={() => handleDeleteOpen(asset)}
+
             title="Stub: delete comes after DELETE endpoint"
-            className="inline-flex cursor-not-allowed items-center gap-1 rounded-md border border-zinc-800 px-2.5 py-1 text-xs text-zinc-600"
+            className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800"
           >
             <Trash2 size={13} />
             Delete
           </button>
         </div>
       </div>
+      <DeleteDialog
+        open={deleteDialogOpen}
+        onClose={() => {
+          setDeleteDialogOpen(false);
+          setDeletingAsset(null);
+        }}
+        asset={deletingAsset}
+        onDelete={handleDeleteConfirm}
+      />
     </div>
   );
 }
@@ -734,6 +781,7 @@ export default function FilesManager() {
   const [projectMode, setProjectMode] = useState("");
   const [searchText, setSearchText] = useState("");
   const [orderBy, setOrderBy] = useState("newest");
+
 
   useEffect(() => {
     if (uiStatesLoading) return;
@@ -1034,11 +1082,16 @@ export default function FilesManager() {
         ) : (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {filteredAssets.map((asset) => (
-              <AssetCard key={normalizeAssetId(asset)} asset={asset} />
+              <AssetCard
+                key={normalizeAssetId(asset)}
+                asset={asset}
+                onDeleted={() => fetchAssets({ quiet: true })}
+              />
             ))}
           </div>
         )}
       </main>
+
     </div>
   );
 }

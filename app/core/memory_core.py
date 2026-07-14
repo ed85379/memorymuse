@@ -525,6 +525,42 @@ def tag_weight(payload, tag_boost=1.2, muse_boost=1.15, remembered_boost=2.0, pr
         score *= project_boost
     return score
 
+def get_payload_project_ids(payload: dict) -> set[str]:
+    """
+    Return the complete normalized project membership for a Qdrant payload.
+
+    `project_ids` is canonical. `project_id` is included for legacy messages
+    and any payloads not yet backfilled.
+    """
+    raw_project_ids = payload.get("project_ids") or []
+
+    if isinstance(raw_project_ids, str):
+        raw_project_ids = [raw_project_ids]
+
+    legacy_project_id = payload.get("project_id")
+    if legacy_project_id:
+        raw_project_ids.append(legacy_project_id)
+
+    return {str(project_id) for project_id in raw_project_ids if project_id}
+
+
+def has_project_overlap(project_ids, target_project_ids) -> bool:
+    """True when the entry belongs to at least one target project."""
+    return bool(set(project_ids) & {str(project_id) for project_id in target_project_ids})
+
+
+def projects_are_fully_excluded(project_ids, excluded_project_ids) -> bool:
+    """
+    Exclude only when the entry has project membership and *all* of its
+    projects are excluded.
+
+    A global/no-project entry remains eligible.
+    """
+    project_ids = set(project_ids)
+    excluded_project_ids = {str(project_id) for project_id in excluded_project_ids}
+
+    return bool(project_ids) and project_ids.issubset(excluded_project_ids)
+
 def search_indexed_memory(
     query,
     projects_in_focus=None,     # List[str], e.g. ["proj_abc123"]
@@ -580,10 +616,10 @@ def search_indexed_memory(
 
     # Project focus: hard filter for 100%
     if projects_in_focus and blend_ratio == 1.0:
-        query_filter["must"] = [
-            {"key": "project_id", "match": {"any": projects_in_focus}}
+        query_filter["should"] = [
+            {"key": "project_id", "match": {"any": projects_in_focus}},
+            {"key": "project_ids", "match": {"any": projects_in_focus}},
         ]
-        # Note: If you want to also include messages with project_ids array, you'll need to expand filter logic or post-process
 
     if "must" not in query_filter:
         query_filter["must"] = []
@@ -629,8 +665,8 @@ def search_indexed_memory(
             "user_tags": hit.payload.get("user_tags"),
             "muse_tags": hit.payload.get("muse_tags"),
             "remembered": hit.payload.get("remembered", False),
-            "project_id": hit.payload.get("project_id"),
-            "project_ids": hit.payload.get("project_ids"),
+            "project_id": hit.payload.get("project_id"),  # legacy visibility
+            "project_ids": list(get_payload_project_ids(hit.payload)),
             "thread_ids": hit.payload.get("thread_ids"),
         }
         # Biases
@@ -651,10 +687,10 @@ def search_indexed_memory(
         pids = entry.get("project_ids")
         tids = entry.get("thread_ids")
 
-        # Project filter
-        if pids is not None and pids:
-            if all(pid in excluded_project_ids for pid in pids):
-                continue
+        # Project visibility:
+        # Remove an entry only if all of its project memberships are excluded.
+        if projects_are_fully_excluded(pids, excluded_project_ids):
+            continue
 
         # Thread filter
         if tids is not None and tids:
@@ -687,10 +723,7 @@ def search_indexed_memory(
         #print(f"\n[Project Focus Blend] projects_in_focus={projects_in_focus}, blend_ratio={blend_ratio}")
         for i, entry in enumerate(filtered_results):
             project_ids = entry.get("project_ids") or []
-            in_focus = (
-                    (entry.get("project_id") in projects_in_focus)
-                    or any(pid in projects_in_focus for pid in project_ids)
-            )
+            in_focus = has_project_overlap(project_ids, projects_in_focus)
             pre_score = entry["score"]
             if in_focus:
                 entry["score"] *= 1 + (blend_ratio * project_boost)
@@ -713,10 +746,11 @@ def search_indexed_memory(
     if projects_in_focus and blend_ratio == 1.0:
         before = len(filtered_results)
         filtered_results = [
-            entry for entry in filtered_results
-            if (
-                    (entry.get("project_id") in projects_in_focus)
-                    or any(pid in projects_in_focus for pid in entry.get("project_ids", []))
+            entry
+            for entry in filtered_results
+            if has_project_overlap(
+                entry.get("project_ids") or [],
+                projects_in_focus,
             )
         ]
         after = len(filtered_results)

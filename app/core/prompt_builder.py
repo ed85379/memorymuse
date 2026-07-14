@@ -19,6 +19,7 @@ from app.config import muse_settings, MONGO_FILES_COLLECTION, MONGO_PROJECTS_COL
 from app.core.muse_profile import muse_profile
 from app.services.feeds import get_dot_status, get_openweathermap, get_space_weather
 from app.core.time_location_utils import _load_user_location, get_local_human_time, is_quiet_hour, user_data
+from app.core.assets_core import find_living_asset_by_id, read_asset_base64
 
 def collect_prompt_context(**context_kwargs):
     # Set user locality
@@ -48,6 +49,7 @@ def collect_prompt_context(**context_kwargs):
     # Passthrough values
     active_project_report = context_kwargs.get("active_project_report", {})
     injected_file_ids = context_kwargs.get("injected_file_ids", [])
+    injected_asset_ids = context_kwargs.get("injected_asset_ids", [])
     ephemeral_files = context_kwargs.get("ephemeral_files", [])
     blend_ratio = context_kwargs.get("blend_ratio", 0.0)
     message_ids_to_exclude = context_kwargs.get("message_ids_to_exclude", [])
@@ -74,6 +76,7 @@ def collect_prompt_context(**context_kwargs):
         "thread_meta": thread_meta,
         "active_project_report": active_project_report,
         "injected_file_ids": injected_file_ids,
+        "injected_asset_ids": injected_asset_ids,
         "ephemeral_files": ephemeral_files,
         "blend_ratio": blend_ratio,
         "message_ids_to_exclude": message_ids_to_exclude,
@@ -309,6 +312,7 @@ class PromptBuilder:
 
         current_user_addon_builders = {
             "injected_files": lambda ctx: self.add_files(ctx["injected_file_ids"]),
+            "injected_assets": lambda ctx: self.add_assets(ctx["injected_asset_ids"]),
             "ephemeral_files": lambda ctx: self.add_ephemeral_files(ctx["ephemeral_files"]),
         }
 
@@ -444,6 +448,44 @@ class PromptBuilder:
             })
 
         return file_attachments
+
+    def add_assets(self, injected_asset_ids):
+        """
+        For each asset ID in injected_asset_ids:
+        - Fetch a living asset doc from MongoDB.
+        - Load its bytes as base64.
+        - Return structured attachments for transport-layer use.
+        """
+        if not injected_asset_ids:
+            return
+
+        asset_attachments = []
+
+        for asset_id in injected_asset_ids:
+            asset_doc = find_living_asset_by_id(asset_id)
+            if not asset_doc:
+                continue
+
+            filename = (
+                    asset_doc.get("display_name")
+                    or asset_doc.get("filename")
+                    or asset_id
+            )
+            mimetype = asset_doc.get("mimetype") or "application/octet-stream"
+
+            try:
+                file_data = read_asset_base64(asset_doc)
+            except Exception as e:
+                print(f"Error - Failed to attach asset: {e}")
+                continue
+
+            asset_attachments.append({
+                "filename": filename,
+                "file_data": file_data,
+                "mime_type": mimetype,
+            })
+
+        return asset_attachments
 
     def add_ephemeral_files(self, ephemeral_files):
         self.ephemeral_files = []

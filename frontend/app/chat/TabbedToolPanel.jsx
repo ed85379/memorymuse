@@ -42,12 +42,15 @@ export default function TabbedToolPanel(
     setAutoAssign,
     injectedFiles,
     setInjectedFiles,
+    setInjectedAssets,
+    injectedAssets,
     files,
     fetchFiles,
     filesLoading,
     setFilesLoading,
     filesError,
     handlePinToggle,
+    handleAssetPinToggle,
     threads,
     threadMap,
   }
@@ -101,12 +104,15 @@ export default function TabbedToolPanel(
             setAutoAssign={setAutoAssign}
             injectedFiles={injectedFiles}
             setInjectedFiles={setInjectedFiles}
+            injectedAssets={injectedAssets}
+            setInjectedAssets={setInjectedAssets}
             files={files}
             fetchFiles={fetchFiles}
             filesLoading={filesLoading}
             setFilesLoading={setFilesLoading}
             filesError={filesError}
             handlePinToggle={handlePinToggle}
+            handleAssetPinToggle={handleAssetPinToggle}
           />
         )}
         {activeTab === "threads" && (

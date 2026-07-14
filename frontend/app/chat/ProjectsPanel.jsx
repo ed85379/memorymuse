@@ -18,12 +18,15 @@ export default function ProjectsPanel({
   setAutoAssign,
   injectedFiles,
   setInjectedFiles,
+  injectedAssets,
+  setInjectedAssets,
   files,
   fetchFiles,
   filesLoading,
   setFilesLoading,
   filesError,
-  handlePinToggle
+  handlePinToggle,
+  handleAssetPinToggle,
 }) {
 
 
@@ -53,8 +56,21 @@ export default function ProjectsPanel({
     });
   };
 
+  const handleAssetInjectToggle = (aid, name) => {
+    setInjectedAssets(prev => {
+      const exists = prev.find(a => a.id === aid);
+      if (exists) {
+        return prev.filter(a => a.id !== aid);
+      } else {
+        return [...prev, { id: aid, name, pinned: false }];
+      }
+    });
+  };
+
   const isInjected = fid => injectedFiles.some(f => f.id === fid);
   const isPinned = fid => injectedFiles.some(f => f.id === fid && f.pinned);
+  const isAssetInjected = aid => injectedAssets.some(a => a.id === aid);
+  const isAssetPinned = aid => injectedAssets.some(a => a.id === aid && a.pinned);
 
   return (
     <div className="p-2 text-neutral-200">
@@ -91,7 +107,14 @@ export default function ProjectsPanel({
         </div>
       )}
 
-      {project && (
+      {project && (() => {
+        const projectAssets = assetsByProjectId[project._id] || [];
+
+        const displayedAssets = projectAssets.filter(
+          assetFile => assetFile.source_type === "user_upload"
+        );
+
+        return (
         <>
         {/* Focus */}
         <div className="mb-4 flex flex-col items-center">
@@ -204,10 +227,11 @@ export default function ProjectsPanel({
           </ul>
 
           {/* New assets */}
+
           <ul className="mt-3 space-y-1 border-t border-neutral-800 pt-3">
-            {(assetsByProjectId[project._id] || []).map(assetFile => {
-              const injected = isInjected(assetFile.id);
-              const pinned = isPinned(assetFile.id);
+            {displayedAssets.map(assetFile => {
+              const injected = isAssetInjected(assetFile.id);
+              const pinned = isAssetPinned(assetFile.id);
 
               return (
                 <li key={assetFile.id} className="flex items-center gap-2 text-neutral-200">
@@ -229,7 +253,7 @@ export default function ProjectsPanel({
                         ? "bg-purple-600 text-purple-100"
                         : "bg-neutral-800 text-purple-300 hover:bg-purple-600 hover:text-purple-100"
                       }`}
-                    onClick={() => handleInjectToggle(assetFile.id, assetFile.name)}
+                    onClick={() => handleAssetInjectToggle(assetFile.id, assetFile.name)}
                     type="button"
                   >
                     {injected ? "Injected" : "Inject"}
@@ -243,7 +267,7 @@ export default function ProjectsPanel({
                       }
                       ${!injected ? "opacity-50 cursor-not-allowed" : ""}
                     `}
-                    onClick={() => injected && handlePinToggle(assetFile.id)}
+                    onClick={() => injected && handleAssetPinToggle(assetFile.id)}
                     disabled={!injected}
                     type="button"
                     aria-label={pinned ? `Unpin ${assetFile.name}` : `Pin ${assetFile.name}`}
@@ -258,13 +282,14 @@ export default function ProjectsPanel({
               );
             })}
 
-            {(!assetsLoading && (assetsByProjectId[project._id] || []).length === 0) && (
+            {!assetsLoading && displayedAssets.length === 0 && (
               <li className="text-neutral-500">No asset files in this project yet.</li>
             )}
           </ul>
         </div>
         </>
-      )}
+        );
+      })()}
     </div>
   );
 }

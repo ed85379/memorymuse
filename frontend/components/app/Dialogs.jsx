@@ -135,8 +135,8 @@ export function DetachDialog({ open, onClose, file, onDetach }) {
   );
 }
 
-//--- Delete File Dialog ---
-export function DeleteDialog({ open, onClose, file, onDelete }) {
+//--- Delete Asset Dialog ---
+export function DeleteDialog({ open, onClose, asset, onDelete }) {
   return (
     <BaseDialogContent
       open={open}
@@ -167,7 +167,7 @@ export function DeleteDialog({ open, onClose, file, onDelete }) {
       ]}
     >
       <div style={{ marginBottom: 10 }}>
-        Are you sure you want to delete <b>{file?.name}</b>?
+        Are you sure you want to delete <b>{asset?.filename}</b>?
       </div>
       <div style={{ fontSize: 14, color: "#a6a4c6", marginBottom: 18 }}>
         <br />This file will be removed from all projects and locations.<br /><br />

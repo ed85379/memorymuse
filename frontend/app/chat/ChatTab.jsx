@@ -84,8 +84,13 @@ const ChatTab = (
     autoAssign,
     injectedFiles,
     files,
+    assetsByProjectId,
+    assetsById,
     setInjectedFiles,
+    injectedAssets,
+    setInjectedAssets,
     handlePinToggle,
+    handleAssetPinToggle,
 
     // Message Actions
     createThreadWithMessages,
@@ -205,20 +210,68 @@ const ChatTab = (
       })
     );
 
-    const optimisticAssets = ephemeralPayload.map((f, index) => ({
+    const optimisticEphemeralAssets = ephemeralPayload.map((f, index) => ({
       asset_id: f.asset_id,
       asset_type: inferAssetTypeFromMime(f.type),
       mimetype: f.type,
       filename: f.name,
       display_name: f.name,
       size: f.size,
+
       role: "attachment",
       display: f.type?.startsWith("image/") ? "inline" : "download",
       order: index,
+
       source_type: "chat_upload",
       bytes_status: "pending",
       preview_url: f.preview_url,
     }));
+
+    const optimisticInjectedAssets = injectedAssets
+      .map(({ id: assetId }, index) => {
+        const asset = assetsById[assetId];
+        if (!asset) return null;
+
+        const mimetype = asset.mimetype || asset.mime_type || asset.type;
+        const filename =
+          asset.display_name ||
+          asset.filename ||
+          asset.name ||
+          asset.original_filename ||
+          assetId;
+
+        return {
+          asset_id: asset.asset_id || asset.id || assetId,
+          asset_type: asset.asset_type || inferAssetTypeFromMime(mimetype),
+          mimetype,
+          filename,
+          display_name: asset.display_name || filename,
+          size: asset.size ?? asset.size_bytes,
+
+          role: "attachment",
+          display: mimetype?.startsWith("image/") ? "inline" : "download",
+
+          // Continue after newly uploaded ephemeral items.
+          order: ephemeralPayload.length + index,
+
+          // Preserve the asset's actual provenance.
+          source_type: asset.source_type,
+          bytes_status:
+            asset.bytes_status ||
+            asset.storage?.bytes_status ||
+            "available",
+
+          // Only include this if your asset listing endpoint already returns
+          // a usable content/preview URL.
+          preview_url: asset.preview_url || asset.content_url,
+        };
+      })
+      .filter(Boolean);
+
+    const optimisticAssets = [
+      ...optimisticEphemeralAssets,
+      ...optimisticInjectedAssets,
+    ];
 
     // 1. Generate the message_id (async)//
     const message_id = await assignMessageId({
@@ -286,6 +339,7 @@ const ChatTab = (
         auto_assign: autoAssign,
         blend_ratio: focus,
         injected_files: injectedFiles.map(f => f.id),
+        injected_assets: injectedAssets.map(a => a.id),
         ephemeral_files: ephemeralPayload,
         source: "webui",
         prompt_type: "webui"
@@ -589,28 +643,46 @@ const ChatTab = (
       file: f.file,
       source: "ephemeral",
     })),
-    ...injectedFiles
-      .filter(({ id }) => {
-        // Exclude any injected files that are also in ephemeralFiles, if you ever overlap
-        return !ephemeralFiles.some(f => f.id === id);
-      })
-      .map(({ id: fileId, pinned }) => {
-        const file = files.find(f => f.id === fileId);
-        if (!file) return null;
-        return {
-          id: fileId,
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          pinned,
-          source: "injected",
-          file,
-        };
-      })
+
+    ...injectedFiles.map(({ id: fileId, pinned }) => {
+      const file = files.find(f => f.id === fileId);
+      if (!file) return null;
+
+      return {
+        id: fileId,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        pinned,
+        source: "injected",
+        file,
+      };
+    }),
+
+    ...injectedAssets.map(({ id: assetId, pinned }) => {
+      const asset = assetsById[assetId];
+      if (!asset) return null;
+
+      return {
+        id: assetId,
+        name:
+          asset.display_name ||
+          asset.filename ||
+          asset.name ||
+          asset.original_filename ||
+          assetId,
+        type: asset.mime_type || asset.type,
+        size: asset.size_bytes || asset.size,
+        pinned,
+        source: "asset",
+        asset,
+      };
+    }),
   ].filter(Boolean);
 
   const clearEphemeralFiles = () => {
     setInjectedFiles(prev => prev.filter(f => f.pinned));
+    setInjectedAssets(prev => prev.filter(a => a.pinned));
     setEphemeralFiles([]);
   };
 
@@ -961,8 +1033,10 @@ const ChatTab = (
                   onClick={() => {
                     if (f.source === "ephemeral") {
                       setEphemeralFiles(files => files.filter(x => x.id !== f.id));
-                    } else {
+                    } else if (f.source === "injected") {
                       setInjectedFiles(prev => prev.filter(x => x.id !== f.id));
+                    } else {
+                      setInjectedAssets(prev => prev.filter(x => x.id !== f.id));
                     }
                   }}
                   aria-label={`Remove ${f.name}`}
@@ -983,6 +1057,26 @@ const ChatTab = (
                 {f.source === "injected" && (
                   <button
                     onClick={() => handlePinToggle(f.id)}
+                    aria-label={f.pinned ? `Unpin ${f.name}` : `Pin ${f.name}`}
+                    className="ml-1 focus:outline-none"
+                    type="button"
+                    tabIndex={0}
+                    title={f.pinned ? "Unpin file" : "Pin file"}
+                    style={{ background: "none", border: 0, padding: 0, display: "flex", alignItems: "center" }}
+                  >
+                    <Pin
+                      className={`w-4 h-4 shrink-0 ${
+                        f.pinned
+                          ? "text-yellow-300 opacity-100"
+                          : "text-purple-300 opacity-60"
+                      }`}
+                      strokeWidth={2}
+                    />
+                  </button>
+                )}
+                {f.source === "asset" && (
+                  <button
+                    onClick={() => handleAssetPinToggle(f.id)}
                     aria-label={f.pinned ? `Unpin ${f.name}` : `Pin ${f.name}`}
                     className="ml-1 focus:outline-none"
                     type="button"

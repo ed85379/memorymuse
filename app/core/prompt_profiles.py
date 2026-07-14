@@ -27,7 +27,7 @@ def build_webui_prompt(user_input, **kwargs):
         "current_user": {
             "mode": "chat_turn",
             "addons": [
-                "injected_files",
+                "injected_assets",
                 "ephemeral_files",
             ],
         },
@@ -78,7 +78,7 @@ def build_scene_webui_prompt(user_input, **kwargs):
         "current_user": {
             "mode": "chat_turn",
             "addons": [
-                "injected_files",
+                "injected_assets",
                 "ephemeral_files",
             ],
         },

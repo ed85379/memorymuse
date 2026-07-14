@@ -33,6 +33,7 @@ def get_files(
     """
 
     query = {}
+    query["is_deleted"] = {"$ne": True }
 
     if project_id and not mode:
         # project_id only: default to 'only'

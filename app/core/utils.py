@@ -27,6 +27,7 @@ LOCATIONS = {
     "webui": "WebUI / Frontend",
     "discord": "Discord",
     "smartspeaker": "Smart-Speaker",
+    "asset_text_chunk": "Uploaded Asset",
 }
 
 SOURCES_ALL = ["frontend", "webui", "discord", "chatgpt", "reminder", "system", "debug", "internal", "thoughts"]

@@ -56,12 +56,14 @@ async def run_log_queue(
     while True:
         msg = await queue.get()
         thread_id = msg.get("thread_id")
+        project_ids = msg.get("project_ids")
         try:
             await log_message(
                 role=msg.get("role", "muse"),
                 message=msg["message"],
                 timestamp=msg.get("timestamp"),
                 project_id=msg.get("project_id"),
+                project_ids=msg.get("project_ids") if project_ids else [],
                 thread_ids=[thread_id] if thread_id else [],
                 source=msg.get("source"),
                 metadata=msg.get("metadata") or {},

@@ -3,7 +3,7 @@ import hashlib
 import mimetypes
 import base64
 import binascii
-from bson import ObjectId
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -15,10 +15,11 @@ import requests
 from werkzeug.utils import secure_filename
 
 from app.config import ASSET_STORAGE_ROOT
-from app.config import MONGO_ASSETS_COLLECTION
+from app.config import MONGO_ASSETS_COLLECTION, MONGO_CONVERSATION_COLLECTION
 from app.databases.mongo_connector import mongo
 from app.core.utils import chunk_file
 from app.core.memory_core import log_message
+from app.databases.memory_indexer import update_qdrant_metadata_for_messages
 
 
 AssetLifecycleStatus = Literal[
@@ -114,6 +115,8 @@ class DownloadedAsset:
     size: int
     final_url: str
 
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 def default_lifecycle() -> AssetLifecycle:
     return AssetLifecycle(
@@ -386,7 +389,6 @@ def build_asset_doc(
     content_sha256: str | None = None,
     source_url: str | None = None,
     project_ids: list[str] | None = None,
-    message_ids: list[str] | None = None,
     provenance: AssetProvenance | dict | None = None,
     lifecycle: AssetLifecycle | dict | None = None,
 ) -> dict:
@@ -435,16 +437,8 @@ def build_asset_doc(
 
         "lifecycle": lifecycle_doc,
 
-        "message_ids": message_ids or [],
         "project_ids": project_ids or [],
         "thread_ids": [],
-
-        "text_indexing": {
-            "is_text_indexed": False,
-            "chunk_message_ids": [],
-            "exclude_chunks_when_injected": True,
-            "injected_message_ids": [],
-        },
 
         "provenance": provenance_doc,
 
@@ -461,7 +455,6 @@ def create_local_asset_from_bytes(
     asset_id: str | None = None,
     url: str | None = None,
     project_ids: list[str] | None = None,
-    message_ids: list[str] | None = None,
     provenance: AssetProvenance | dict | None = None,
     lifecycle: AssetLifecycle | dict | None = None,
 ) -> dict:
@@ -514,7 +507,6 @@ def create_local_asset_from_bytes(
         content_sha256=content_hash,
         source_url=url,
         project_ids=project_ids,
-        message_ids=message_ids,
         provenance=provenance,
         lifecycle=lifecycle,
     )
@@ -532,7 +524,6 @@ def create_local_asset_from_url(
     source_type: str,
     asset_id: str | None = None,
     project_ids: list[str] | None = None,
-    message_ids: list[str] | None = None,
     provenance: AssetProvenance | dict | None = None,
     lifecycle: AssetLifecycle | dict | None = None,
     timeout_seconds: int = DEFAULT_DOWNLOAD_TIMEOUT_SECONDS,
@@ -565,7 +556,6 @@ def create_local_asset_from_url(
         source_type=source_type,
         url=url,
         project_ids=project_ids,
-        message_ids=message_ids,
         provenance=provenance,
         lifecycle=lifecycle,
     )
@@ -578,7 +568,6 @@ def create_local_asset_from_base64(
     source_type: str,
     asset_id: str | None = None,
     project_ids: list[str] | None = None,
-    message_ids: list[str] | None = None,
     provenance: AssetProvenance | dict | None = None,
     lifecycle: AssetLifecycle | dict | None = None,
     max_bytes: int | None = None,
@@ -614,7 +603,6 @@ def create_local_asset_from_base64(
         mimetype=mimetype,
         source_type=source_type,
         project_ids=project_ids,
-        message_ids=message_ids,
         provenance=provenance,
         lifecycle=lifecycle,
     )
@@ -630,6 +618,38 @@ def read_asset_bytes(asset_doc: dict) -> bytes:
     with open(full_path, "rb") as f:
         return f.read()
 
+def read_asset_base64(asset_doc: dict) -> str:
+    full_path = get_asset_full_path(asset_doc)
+
+    with open(full_path, "rb") as f:
+        file_data = f.read()
+        b64_data: str = base64.b64encode(file_data).decode("ascii")
+        return b64_data
+
+def get_all_message_ids_for_assets(asset_ids: list[str] | None) -> list[str]:
+    """
+    Given a list of asset IDs, return a deduplicated list of indexed chunk
+    message_ids belonging to those assets.
+
+    Used to prevent semantic recall from also returning chunks from an asset
+    that has been intentionally injected into the current turn.
+    """
+    if not asset_ids:
+        return []
+
+    assets = mongo.find_documents(
+        collection_name=MONGO_ASSETS_COLLECTION,
+        query={"_id": {"$in": asset_ids}},
+    )
+
+    all_message_ids = set()
+
+    for asset in assets:
+        indexing = asset.get("indexing") or {}
+        message_ids = indexing.get("message_ids") or []
+        all_message_ids.update(message_ids)
+
+    return list(all_message_ids)
 
 def asset_to_data_url(asset_doc: dict) -> str:
     mimetype = asset_doc.get("mimetype") or "application/octet-stream"
@@ -884,6 +904,18 @@ def find_living_asset_by_source_url(
 
     return mongo.find_one_document(MONGO_ASSETS_COLLECTION, query)
 
+def find_living_asset_by_id(
+    asset_id: str | None,
+) -> dict | None:
+    if not asset_id:
+        return None
+
+    query = {
+        **living_asset_filter(),
+        "_id": asset_id,
+    }
+
+    return mongo.find_one_document(MONGO_ASSETS_COLLECTION, query)
 
 def chunk_timestamp_for_batch(base_ts: datetime, chunk_index: int) -> datetime:
     return base_ts + timedelta(milliseconds=chunk_index)
@@ -1022,7 +1054,6 @@ def asset_for_ui(asset_doc: dict) -> dict:
         "source_type": asset_doc.get("source_type"),
 
         "project_ids": asset_doc.get("project_ids", []),
-        "message_ids": asset_doc.get("message_ids", []),
         "thread_ids": asset_doc.get("thread_ids", []),
 
         "storage": {
@@ -1050,4 +1081,99 @@ def asset_for_ui(asset_doc: dict) -> dict:
         # Adjust paths to match your asset API.
         "content_url": f"/api/assets/{asset_id}/content",
         "download_url": f"/api/assets/{asset_id}/download",
+    }
+
+def get_asset_index_message_ids(asset_doc: dict[str, Any]) -> list[str]:
+    """
+    Transitional compatibility helper.
+
+    New asset text indexing writes IDs under asset.indexing.message_ids.
+    Root-level message_ids remains supported while old records exist.
+    """
+    indexing = asset_doc.get("indexing") or {}
+
+    message_ids = (
+        indexing.get("message_ids")
+        or []
+    )
+
+    # Preserve order while removing accidental duplicates.
+    return list(dict.fromkeys(mid for mid in message_ids if mid))
+
+async def soft_delete_asset(
+    asset_id: str,
+    *,
+    deleted_by: str | None = None,
+) -> dict[str, Any]:
+    """
+    Soft-delete an asset and its indexed text-chunk messages.
+
+    Does not remove stored bytes. A later purge job handles physical deletion.
+    """
+    asset_doc = mongo.find_one_document(
+        MONGO_ASSETS_COLLECTION,
+        {"_id": asset_id},
+    )
+
+    if not asset_doc:
+        return {
+            "status": "not_found",
+            "asset_id": asset_id,
+        }
+
+    lifecycle = asset_doc.get("lifecycle") or {}
+    current_status = lifecycle.get("status", "available")
+
+    # Idempotency matters: an impatient double-click should not create drama.
+    if current_status != "available":
+        return {
+            "status": "not_available",
+            "asset_id": asset_id,
+            "lifecycle_status": current_status,
+        }
+
+    now = utc_now()
+    message_ids = get_asset_index_message_ids(asset_doc)
+
+    asset_set_fields = {
+        "lifecycle.status": "deleted",
+        "lifecycle.deleted_at": now,
+        "lifecycle.updated_at": now,
+        "updated_at": now,
+    }
+
+    if deleted_by:
+        asset_set_fields["lifecycle.deleted_by"] = deleted_by
+
+    # 1. The asset is no longer a living/reusable asset.
+    # Storage remains available until the eventual purge pass.
+    mongo.update_one_document_array(
+        MONGO_ASSETS_COLLECTION,
+        {"_id": asset_id},
+        {"$set": asset_set_fields},
+    )
+
+    # 2. Derived recall artifacts are no longer living recall material.
+    if message_ids:
+        mongo.update_many_documents(
+            MONGO_CONVERSATION_COLLECTION,
+            {
+                "message_id": {"$in": message_ids},
+                "is_deleted": {"$ne": True},
+            },
+            {
+                "$set": {
+                    "is_deleted": True,
+                    "updated_on": now,
+                }
+            },
+        )
+
+        # Payload-only Qdrant update: no re-embedding required.
+        await update_qdrant_metadata_for_messages(message_ids)
+
+    return {
+        "status": "deleted",
+        "asset_id": asset_id,
+        "message_ids_soft_deleted": message_ids,
     }

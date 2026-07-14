@@ -13,6 +13,7 @@ from app.core.assets_core import (
     is_text_asset_mimetype,
     mark_asset_recall_indexed,
     asset_for_ui,
+    soft_delete_asset,
 )
 
 router = APIRouter(
@@ -175,3 +176,10 @@ async def upload_asset(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Asset upload failed: {e}")
+
+@router.delete("/{asset_id}")
+async def delete_asset(asset_id: str):
+    return await soft_delete_asset(
+        asset_id,
+        deleted_by="user",
+    )

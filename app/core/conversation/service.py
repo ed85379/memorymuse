@@ -14,7 +14,7 @@ from app.api.queues import broadcast_queue, log_queue
 from app.interfaces.websocket_server import broadcast_message
 from app.core.threads_core import get_thread_type
 from app.databases.memory_indexer import assign_message_id
-from app.core.assets_core import create_local_asset_from_base64
+from app.core.assets_core import create_local_asset_from_base64, get_all_message_ids_for_assets, find_living_asset_by_id, asset_doc_to_ref
 
 async def handle_conversation_turn(data: dict, client):
     ## Shared client fields
@@ -26,6 +26,7 @@ async def handle_conversation_turn(data: dict, client):
     ## Optional client fields
     user_timestamp = data.get("timestamp")
     injected_files = data.get("injected_files", [])
+    injected_assets = data.get("injected_assets", [])
     ephemeral_files = data.get("ephemeral_files", [])
 
     auto_assign = data.get("auto_assign", False)
@@ -47,6 +48,9 @@ async def handle_conversation_turn(data: dict, client):
     ## File/context prep
     injected_file_ids = [ObjectId(fid) for fid in injected_files]
     message_ids_to_exclude = get_all_message_ids_for_files(injected_file_ids)
+
+    injected_asset_ids = [aid for aid in injected_assets]
+    message_ids_to_exclude = get_all_message_ids_for_assets(injected_asset_ids)
 
     num_injected_chunks = len(message_ids_to_exclude)
     num_ephemeral_chunks = len(ephemeral_files)
@@ -85,6 +89,7 @@ async def handle_conversation_turn(data: dict, client):
 
         ## Only relevant when in project-capable prompt type with pre-uploaded files
         "injected_file_ids": injected_file_ids,
+        "injected_asset_ids": injected_asset_ids,
 
         ## Only relevant when in a thread-capable prompt type
         "extended_history": extended_history,
@@ -119,51 +124,70 @@ async def handle_conversation_turn(data: dict, client):
     if thread_id:
         user_msg["thread_id"] = thread_id
 
-    if ephemeral_files:
-        asset_refs = []
+    asset_refs = []
 
-        for index, file_obj in enumerate(ephemeral_files):
-            name = file_obj.get("name") or "untitled"
-            mimetype = file_obj.get("type") or "application/octet-stream"
+    # 1. Newly dropped / ephemeral chat files: ingest, then reference.
+    for index, file_obj in enumerate(ephemeral_files or []):
+        name = file_obj.get("name") or "untitled"
+        mimetype = file_obj.get("type") or "application/octet-stream"
 
-            asset_doc = create_local_asset_from_base64(
-                asset_id=file_obj.get("asset_id"),
-                data=file_obj.get("data") or "",
-                filename=name,
-                mimetype=mimetype,
-                source_type="chat_upload",
-                project_ids=[project_id] if project_id else None,
-                message_ids=None,
-                provenance={
-                    "source_type": "chat_upload",
-                    "original_filename": name,
-                    "uploaded_via": source,
-                    "ingested_at": datetime.now(timezone.utc).isoformat(),
-                },
-                lifecycle={
-                    "permanent": False,
-                },
-                #max_bytes=DEFAULT_MAX_UPLOAD_BYTES,  # if you have one
-            )
-
-            asset_id = asset_doc.get("asset_id") or asset_doc.get("_id") or file_obj.get("asset_id")
-
-            asset_refs.append({
-                "asset_id": asset_id,
-                "asset_type": asset_doc.get("asset_type"),
-                "mimetype": asset_doc.get("mimetype") or mimetype,
-                "filename": asset_doc.get("filename") or name,
-                "display_name": asset_doc.get("display_name") or name,
-                "size": asset_doc.get("size") or file_obj.get("size"),
-                "role": file_obj.get("role") or "attachment",
-                "display": file_obj.get("display") or (
-                    "inline" if mimetype.startswith("image/") else "download"
-                ),
-                "order": file_obj.get("order", index),
+        asset_doc = create_local_asset_from_base64(
+            asset_id=file_obj.get("asset_id"),
+            data=file_obj.get("data") or "",
+            filename=name,
+            mimetype=mimetype,
+            source_type="chat_upload",
+            project_ids=[project_id] if project_id else None,
+            provenance={
                 "source_type": "chat_upload",
-                "bytes_status": "available",
-            })
+                "original_filename": name,
+                "uploaded_via": source,
+                "ingested_at": datetime.now(timezone.utc).isoformat(),
+            },
+            lifecycle={
+                "permanent": False,
+            },
+        )
 
+        asset_refs.append(
+            asset_doc_to_ref(
+                asset_doc,
+                role=file_obj.get("role") or "attachment",
+                display=file_obj.get("display"),
+                order=file_obj.get("order", index),
+            )
+        )
+
+    # 2. Existing deliberately injected assets: resolve, then reference.
+    injected_order_start = len(asset_refs)
+
+    for offset, injected_asset in enumerate(injected_assets or []):
+        # Adapt this depending on whether injected_assets is already a list
+        # of IDs or small frontend objects like {"asset_id": "..."}.
+        asset_id = (
+            injected_asset.get("asset_id")
+            if isinstance(injected_asset, dict)
+            else injected_asset
+        )
+
+        if not asset_id:
+            continue
+
+        asset_doc = find_living_asset_by_id(asset_id)
+        if not asset_doc:
+            # Ideally this was already filtered earlier during injection
+            # resolution, so this is just a harmless final guard.
+            continue
+
+        asset_refs.append(
+            asset_doc_to_ref(
+                asset_doc,
+                role="injected_asset",
+                order=injected_order_start + offset,
+            )
+        )
+
+    if asset_refs:
         user_msg.setdefault("metadata", {})
         user_msg["metadata"]["assets"] = asset_refs
 
