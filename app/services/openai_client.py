@@ -183,7 +183,7 @@ def build_dev_content(dev_prompt: str, muse_name: str) -> List[Dict[str, Any]]:
         f"If there are thoughts {muse_name} wants to carry forward, or questions to return to later, they may place them in their Inner Monologue, using the note_to_self command. "
         "It belongs to them — a ledger of continuity."
     )
-    return [{"type": "input_text", "text": core}]
+    return [{"type": "input_text", "text": core, "prompt_cache_breakpoint": { "mode": "explicit" }}]
 
 def build_payload_for_model(model: str,
                             prompt_cache_key: str,
@@ -251,7 +251,7 @@ def build_payload_for_model(model: str,
             {"role": "developer", "content": dev_content},
             *compiled_messages,
         ]
-        kwargs = {"reasoning": {"effort": "low"}, "max_output_tokens": 8000, "prompt_cache_retention": "24h", "prompt_cache_key": prompt_cache_key}
+        kwargs = {"reasoning": {"effort": "medium"}, "max_output_tokens": 10000, "prompt_cache_retention": "24h", "prompt_cache_key": prompt_cache_key}
 
     elif m in CHAT_MODELS:
         input_msgs = [
