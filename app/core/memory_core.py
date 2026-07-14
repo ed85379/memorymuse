@@ -3,6 +3,7 @@ import json
 import time
 import asyncio
 import re
+from typing import Any
 from datetime import datetime, timedelta, timezone
 from dateutil.parser import parse as parse_datetime
 from bson import ObjectId
@@ -594,7 +595,7 @@ def search_indexed_memory(
 
     excluded_project_ids = [str(oid) for oid in get_excluded_project_ids(public=public)]
     excluded_thread_ids = get_excluded_thread_ids(public=public)
-    query_filter = {
+    query_filter: dict[str, Any] = {
         "must_not": [
             {"key": "is_hidden", "match": {"value": True}},
             {"key": "is_deleted", "match": {"value": True}},
@@ -632,6 +633,52 @@ def search_indexed_memory(
             range_filter["range"]["lte"] = end_time
 
         query_filter["must"].append(range_filter)
+
+    if projects_in_focus:
+        active_project_id = projects_in_focus[0]
+
+        query_filter["must"].append(
+            {
+                "should": [
+                    # Non-asset messages are governed by normal project blend rules.
+                    {
+                        "must_not": [
+                            {
+                                "key": "source",
+                                "match": {"value": "asset_text_chunk"},
+                            }
+                        ]
+                    },
+
+                    # Unscoped asset chunks are allowed during blended recall.
+                    {
+                        "must": [
+                            {
+                                "key": "source",
+                                "match": {"value": "asset_text_chunk"},
+                            },
+                            {
+                                "is_empty": {"key": "project_ids"},
+                            },
+                        ]
+                    },
+
+                    # Scoped asset chunks must belong to the active project.
+                    {
+                        "must": [
+                            {
+                                "key": "source",
+                                "match": {"value": "asset_text_chunk"},
+                            },
+                            {
+                                "key": "project_ids",
+                                "match": {"value": active_project_id},
+                            },
+                        ]
+                    },
+                ]
+            }
+        )
 
     #client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
     #search_result = client.search(
@@ -955,6 +1002,8 @@ def search_indexed_memories(
 ):
     """
     Search multiple Qdrant collections, blend and score results by source.
+
+    ## Not in use
     """
     results_by_collection = {}
     for collection, weight in collections_weights.items():
