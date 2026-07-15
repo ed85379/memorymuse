@@ -63,7 +63,7 @@ def search_memory(
     """
     import textwrap
 
-    from app.core.utils import format_context_entry, build_project_lookup
+    from app.core.utils import format_context_entry, build_project_lookup, build_asset_lookup
     from app.core.memory_core import search_memory_semantic, get_immediate_context
     from app.databases.mongo_connector import mongo
 
@@ -79,10 +79,12 @@ def search_memory(
         """).strip()
 
     def _format_results(entries):
+        asset_lookup = build_asset_lookup(entries)
         return "\n\n".join(
             format_context_entry(
                 e,
                 project_lookup=project_lookup,
+                asset_lookup=asset_lookup,
                 proj_code_intensity="mixed",
                 purpose=None,
                 search_memory_id=str(e["_id"]) if e.get("_id") else None,

@@ -8,7 +8,14 @@ from cryptography.fernet import Fernet
 from zoneinfo import ZoneInfo
 from typing import Union
 from nanoid import generate
-from app.config import muse_settings, admin_config, MONGO_CONVERSATION_COLLECTION, MONGO_THREADS_COLLECTION, MONGO_PROJECTS_COLLECTION
+from app.config import (
+    muse_settings,
+    admin_config,
+    MONGO_CONVERSATION_COLLECTION,
+    MONGO_THREADS_COLLECTION,
+    MONGO_PROJECTS_COLLECTION,
+    MONGO_ASSETS_COLLECTION,
+)
 from app.core.text_filters import get_text_filter_config, filter_text
 from app.databases.mongo_connector import mongo, mongo_system
 from app.core.time_location_utils import get_formatted_datetime, _load_user_location
@@ -192,6 +199,24 @@ def is_conversation_active():
     minutes = 10
     return (now - last_ts) <= timedelta(minutes=minutes)
 
+def build_asset_lookup(entries: list[dict]) -> dict[str, dict]:
+    asset_ids = {
+        (entry.get("metadata") or {}).get("asset_id")
+        for entry in entries
+        if entry.get("source") == "asset_text_chunk"
+        and (entry.get("metadata") or {}).get("asset_id")
+    }
+
+    if not asset_ids:
+        return {}
+
+    assets = mongo.find_documents(
+        collection_name=MONGO_ASSETS_COLLECTION,
+        query={"_id": {"$in": list(asset_ids)}},
+    )
+
+    return {str(asset["_id"]): asset for asset in assets}
+
 def build_thread_lookup():
     threads = mongo.find_documents(
         MONGO_THREADS_COLLECTION,
@@ -279,11 +304,13 @@ def normalize_role(role: str) -> str:
 def format_context_entry(
         e,
         project_lookup=None,
+        asset_lookup=None,
         proj_code_intensity="MIXED",
         purpose=None,
         search_memory_id=None,
 ):
     loc = _load_user_location()
+    source = e.get("source", "")
     role = e.get("role", "")
     if role == "user":
         name = muse_settings.get_section('user_config').get('USER_NAME') or "User"
@@ -330,6 +357,75 @@ def format_context_entry(
         if proj_name:
             project_meta = f"[Project: {proj_name}]"
 
+    # --- Asset excerpt provenance ---
+    asset_meta = ""
+    if source == "asset_text_chunk":
+        metadata = e.get("metadata") or {}
+        asset_id = metadata.get("asset_id")
+        chunk_index = metadata.get("chunk_index")
+
+        asset_doc = asset_lookup.get(asset_id) if asset_id else None
+
+        if not asset_doc:
+            lines = ["Asset Excerpt — Linked Asset Unavailable"]
+
+            if asset_id:
+                lines.append(f"Asset ID: {asset_id}")
+
+            if search_memory_id:
+                lines.append(f"Recall Message ID: {search_memory_id}")
+
+            lines.append(
+                "Possible issue: this indexed excerpt is still recallable, but its "
+                "source asset could not be found or is no longer living. Its indexed "
+                "message may need cleanup."
+            )
+
+            asset_meta = "\n".join(lines)
+        else:
+            metadata = e.get("metadata") or {}
+            asset_id = metadata.get("asset_id")
+            chunk_index = metadata.get("chunk_index")
+
+            asset_doc = asset_lookup.get(asset_id) if asset_id and asset_lookup else None
+            asset_name = (
+                asset_doc.get("display_name")
+                or asset_doc.get("filename")
+                or asset_id
+            ) if asset_doc else asset_id
+
+            indexing = (asset_doc or {}).get("indexing") or {}
+            chunk_message_ids = indexing.get("chunk_message_ids") or []
+            total_chunks = len(chunk_message_ids)
+
+            lines = ["Asset Excerpt"]
+
+            if asset_name:
+                lines.append(f"Asset: {asset_name}")
+            if asset_id:
+                lines.append(f"Asset ID: {asset_id}")
+
+            if chunk_index is not None:
+                try:
+                    chunk_number = int(chunk_index) + 1
+                    if total_chunks:
+                        lines.append(f"Excerpt: chunk {chunk_number} of {total_chunks}")
+                    else:
+                        lines.append(f"Excerpt: chunk {chunk_number}")
+                except (TypeError, ValueError):
+                    pass
+
+            description = (asset_doc or {}).get("description")
+            if description:
+                lines.append(f"Description: {description}")
+
+            # Leave this out until the command actually exists.
+            # lines.append(
+            #     "Use `read_asset` with this asset ID if the complete file is needed."
+            # )
+
+            asset_meta = "\n".join(lines)
+
     # --- Source ---
     source_name = ""
     source = e.get("source") or ""
@@ -366,6 +462,9 @@ def format_context_entry(
 
     # Line 2: the message itself
     body_line = msg
+
+    if asset_meta:
+        body_line = f"{asset_meta}\n\n{body_line}"
 
     # Line 3: "[2025-12-14 15:30:12] [Project: MemoryMuse]"
     # If we have neither timestamp nor project, we can omit the line entirely

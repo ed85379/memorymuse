@@ -824,11 +824,14 @@ class PromptBuilder:
             semantic_ids = [e.get("message_id") for e in deduped_semantic if e.get("message_id")]
             objectid_lookup = utils.get_objectids_for_message_ids(semantic_ids)  # {message_id: "67f..."}
 
+            asset_lookup = utils.build_asset_lookup(deduped_semantic)
+
             formatted_semantic_entries = []
             for e in deduped_semantic:
                 formatted_entry = utils.format_context_entry(
                     e,
                     project_lookup=project_lookup,
+                    asset_lookup=asset_lookup,
                     proj_code_intensity=proj_code_intensity,
                     purpose="RELEVANT",
                     search_memory_id=objectid_lookup.get(e.get("message_id")),
