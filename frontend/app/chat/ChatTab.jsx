@@ -26,6 +26,7 @@ import {
   ArrowBigDownDash,
   Paperclip,
   Pin,
+  Pencil,
   Sparkles,
   History,
   Slash,
@@ -53,6 +54,11 @@ const ChatTab = (
     audioControls,
     ephemeralFiles,
     setEphemeralFiles,
+    editingEphemeralId,
+    setEditingEphemeralId,
+    ephemeralNameDraft,
+    setEphemeralNameDraft,
+    handleEphemeralRename,
     handleEphemeralUpload,
     messages,
     setMessages,
@@ -1022,11 +1028,60 @@ const ChatTab = (
                   title={iconTitle}
                 />
 
-                {/* File name (with badge for ephemeral) */}
-                <span className="truncate max-w-[120px]">
-                  {f.name.length > 32 ? f.name.slice(0, 29) + "..." : f.name}
-                </span>
+                {/* File name */}
+                {f.source === "ephemeral" && editingEphemeralId === f.id ? (
+                  <input
+                    autoFocus
+                    value={ephemeralNameDraft}
+                    onChange={(e) => setEphemeralNameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleEphemeralRename(f.id, ephemeralNameDraft);
+                        setEditingEphemeralId(null);
+                      }
+
+                      if (e.key === "Escape") {
+                        setEditingEphemeralId(null);
+                      }
+                    }}
+                    onBlur={() => {
+                      handleEphemeralRename(f.id, ephemeralNameDraft);
+                      setEditingEphemeralId(null);
+                    }}
+                    aria-label="Ephemeral file name"
+                    className="
+                      min-w-0 max-w-[120px]
+                      bg-black/30 border border-blue-300/60 rounded
+                      px-1 py-0.5 text-xs text-purple-100
+                      outline-none focus:border-blue-200
+                    "
+                  />
+                ) : (
+                  <span
+                    className="truncate max-w-[120px]"
+                    title={f.name}
+                  >
+                    {f.name.length > 32 ? f.name.slice(0, 29) + "..." : f.name}
+                  </span>
+                )}
                 {badge}
+                {f.source === "ephemeral" && editingEphemeralId !== f.id && (
+                  <button
+                    onClick={() => {
+                      setEditingEphemeralId(f.id);
+                      setEphemeralNameDraft(f.name);
+                    }}
+                    aria-label={`Rename ${f.name}`}
+                    title="Rename ephemeral file"
+                    className="
+                      ml-1 text-blue-300/75 hover:text-blue-100
+                      focus:outline-none transition
+                    "
+                    type="button"
+                  >
+                    <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
+                  </button>
+                )}
 
                 {/* Remove button */}
                 <button

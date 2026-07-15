@@ -645,6 +645,8 @@ export default function ChatPage() {
 
   // Ephemeral file controls
   const [ephemeralFiles, setEphemeralFiles] = useState([]);
+  const [editingEphemeralId, setEditingEphemeralId] = useState(null);
+  const [ephemeralNameDraft, setEphemeralNameDraft] = useState("");
   const [files, setFiles] = useState([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [filesError, setFilesError] = useState(null);
@@ -753,6 +755,21 @@ export default function ChatPage() {
       }
     ]);
   };
+
+  const handleEphemeralRename = (id, rawName) => {
+    const name = rawName.trim();
+
+    if (!name) return;
+
+    setEphemeralFiles(prev =>
+      prev.map(file =>
+        file.id === id
+          ? { ...file, name }
+          : file
+      )
+    );
+  };
+
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const handleShowRecycleBin = () => {
     setShowRecycleBin((prev) => !prev);
@@ -1053,7 +1070,12 @@ export default function ChatPage() {
               audioControls={audioControls}
               ephemeralFiles={ephemeralFiles}
               setEphemeralFiles={setEphemeralFiles}
+              editingEphemeralId={editingEphemeralId}
+              setEditingEphemeralId={setEditingEphemeralId}
+              ephemeralNameDraft={ephemeralNameDraft}
+              setEphemeralNameDraft={setEphemeralNameDraft}
               handleEphemeralUpload={handleEphemeralUpload}
+              handleEphemeralRename={handleEphemeralRename}
               messages={messages}
               setMessages={setMessages}
               threadMessages={threadMessages}
@@ -1177,7 +1199,12 @@ export default function ChatPage() {
               audioControls={audioControls}
               ephemeralFiles={ephemeralFiles}
               setEphemeralFiles={setEphemeralFiles}
+              editingEphemeralId={editingEphemeralId}
+              setEditingEphemeralId={setEditingEphemeralId}
+              ephemeralNameDraft={ephemeralNameDraft}
+              setEphemeralNameDraft={setEphemeralNameDraft}
               handleEphemeralUpload={handleEphemeralUpload}
+              handleEphemeralRename={handleEphemeralRename}
               messages={messages}
               setMessages={setMessages}
               threadMessages={threadMessages}
