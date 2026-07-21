@@ -213,7 +213,7 @@ export default function ChatPage() {
             asset.name ||
             asset.original_filename ||
             assetId,
-          size: asset.size_bytes || asset.size,
+          size: asset.size_bytes || asset.size || asset.storage?.size,
           source_type: asset.source_type,
           asset,
         });
@@ -1236,7 +1236,7 @@ export default function ChatPage() {
               assetsByProjectId={assetsByProjectId}
               assetsById={assetsById}
               setInjectedFiles={setInjectedFiles}
-              injectedAssets={setInjectedAssets}
+              injectedAssets={injectedAssets}
               setInjectedAssets={setInjectedAssets}
               handlePinToggle={handlePinToggle}
               handleAssetPinToggle={handleAssetPinToggle}

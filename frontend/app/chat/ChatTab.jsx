@@ -640,6 +640,14 @@ const ChatTab = (
     }
   };
 
+  const safeInjectedFiles = Array.isArray(injectedFiles)
+    ? injectedFiles
+    : [];
+
+  const safeInjectedAssets = Array.isArray(injectedAssets)
+    ? injectedAssets
+    : [];
+
   const mergedFiles = [
     ...ephemeralFiles.map(f => ({
       id: f.id,
@@ -650,7 +658,7 @@ const ChatTab = (
       source: "ephemeral",
     })),
 
-    ...injectedFiles.map(({ id: fileId, pinned }) => {
+    ...safeInjectedFiles.map(({ id: fileId, pinned }) => {
       const file = files.find(f => f.id === fileId);
       if (!file) return null;
 
@@ -665,7 +673,7 @@ const ChatTab = (
       };
     }),
 
-    ...injectedAssets.map(({ id: assetId, pinned }) => {
+    ...safeInjectedAssets.map(({ id: assetId, pinned }) => {
       const asset = assetsById[assetId];
       if (!asset) return null;
 
