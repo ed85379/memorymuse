@@ -20,7 +20,7 @@ import { Toggle } from "@/components/ui/toggle"
 import { IconToggleButton } from "@/components/ui/icon-toggle-button"
 // Utils
 import { assignMessageId, toPythonIsoString, fileToBase64, trimMessages, generateAssetId, inferAssetTypeFromMime } from '@/utils/utils';
-
+import ChessGamePanel from "./ChessGamePanel";
 // Icons
 import {
   ArrowBigDownDash,
@@ -379,6 +379,9 @@ const ChatTab = (
   const SCROLLBACK_LIMIT = 30;            // After scroll up
   const MAX_RENDERED_MESSAGES = 30;      // Max after scroll loading "more"
   const MESSAGE_LIMIT = 10;              // How many to load per scroll/page
+
+  const [showChessPanel, setShowChessPanel] = useState(false);
+
   const whichMessages = React.useMemo(() => {
     if (threadId) {
       // In a thread: show every message that belongs to this thread,
@@ -834,6 +837,8 @@ const ChatTab = (
         </div>
         */}
 
+
+      <div className="flex items-center gap-2">
         {threadId && (
           <div className="absolute left-1/3 top-20 mt-0 z-20 flex justify-end">
             <span className="bg-purple-900 text-sm text-purple-300 px-4 py-0.5 rounded-lg flex items-center gap-1">
@@ -844,6 +849,22 @@ const ChatTab = (
             </span>
           </div>
         )}
+
+        <button
+          type="button"
+          onClick={() => setShowChessPanel(true)}
+          title="Open chess board"
+          className="
+            rounded-md border border-purple-500/40
+            bg-purple-950/30 px-2 py-1
+            text-sm text-purple-200
+            hover:bg-purple-900/60 hover:text-white
+            transition
+          "
+        >
+          ♞ Board
+        </button>
+      </div>
         {/* Right side: Message actions */}
         <div className="ml-auto">
           <MultiActionBar
@@ -1255,7 +1276,12 @@ const ChatTab = (
         />
       </div>
       </div>
+      <ChessGamePanel
+        open={showChessPanel}
+        onClose={() => setShowChessPanel(false)}
+      />
     </div>
+
   );
 };
 
