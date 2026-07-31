@@ -37,7 +37,7 @@ import {
 // Utils
 import { trimMessages } from '@/utils/utils';
 import { createThreadWithMessages, clearOpenThread, setThreadHidden } from '@/utils/threadActions.js'
-import { updateNavState, updateThreadsState } from "@/utils/statesFunctions";
+import { updateNavState, updateThreadsState, updateGamesState } from "@/utils/statesFunctions";
 import {
   addToThread,
   removeFromThread,
@@ -139,6 +139,8 @@ export default function ChatPage() {
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [threads, setThreads] = useState([]);
   const [threadMap, setThreadMap] = useState({});
+  const [games, setGames] = useState([]);
+  const [gamesMap, setGamesMap] = useState({});
   const initialOpenThreadId = uiStates?.threads?.open_thread_id ?? "";
   const [openThreadId, setOpenThreadId] = useState(initialOpenThreadId);
   const [threadManagerOpen, setThreadManagerOpen] = useState(false)
@@ -252,6 +254,21 @@ export default function ChatPage() {
     }
   }, [uiStatesLoading, uiStates]);
 
+  const fetchGames = async () => {
+    const res = await fetch("/api/games/");
+    const data = await res.json();
+    setGames(data.games || []);
+    setGamesMap({ games: Object.fromEntries((data.games || []).map(t => [g.game_id, g]))});
+  };
+  useEffect(() => { fetchGames(); }, []);
+
+  useEffect(() => {
+    if (!uiStatesLoading) {
+      if (uiStates?.games?.open_game_id) {
+        setOpenThreadId(uiStates.games.open_game_id);
+      }
+    }
+  }, [uiStatesLoading, uiStates]);
 
 
 

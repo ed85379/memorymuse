@@ -32,6 +32,11 @@ export function updateThreadsState(updates) {
   return patchStates("threads", updates);
 }
 
+// Games
+export function updateGamesState(updates) {
+  return patchStates("games", updates);
+}
+
 // Files / filters and sorting
 export function updateFilesState(updates) {
   return patchStates("files", updates);
