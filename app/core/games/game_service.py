@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid4
 
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 from pymongo.collection import Collection
@@ -38,6 +37,13 @@ class GameSessionCreateError(RuntimeError):
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
+def _normalize_game_id(game_id: Any) -> str:
+    if not isinstance(game_id, str) or not game_id.strip():
+        raise GameValidationError(
+            "game_id must be a non-empty string."
+        )
+
+    return game_id.strip()
 
 def _games_collection() -> Collection:
     return mongo.get_collection(MONGO_GAMES_COLLECTION)
@@ -108,20 +114,32 @@ def create_game_session(
     """
     Creates a new durable game world at revision 0.
 
-    No thread_id. No project_id. No message_id.
-    A game is its own session object.
+    game_id is created in React with nanoid so optimistic frontend
+    insertion can use the same final identity.
     """
-    collection = games_collection or _games_collection()
+    game_id = _normalize_game_id(game_id)
 
+    collection = games_collection or _games_collection()
     definition = get_game_definition(game_type)
     initial_state = definition.create_initial_state(create_data)
+
+    if label is not None and not isinstance(label, str):
+        raise GameValidationError(
+            "Game label must be a string or null."
+        )
+
+    normalized_label = (
+        label.strip()
+        if isinstance(label, str) and label.strip()
+        else definition.label
+    )
 
     now = _utcnow()
 
     game_doc = {
         "game_id": game_id,
         "game_type": definition.game_type,
-        "label": label or definition.label,
+        "label": normalized_label,
         "status": "active",
         "revision": 0,
         "state": initial_state,
@@ -134,9 +152,8 @@ def create_game_session(
     try:
         collection.insert_one(game_doc)
     except DuplicateKeyError as exc:
-        # Vanishingly unlikely with UUID4, but this makes the failure honest.
         raise GameSessionCreateError(
-            "Generated duplicate game_id while creating a game session."
+            f"Game '{game_id}' already exists."
         ) from exc
 
     return _public_game_projection(game_doc, include_state=True)
@@ -413,39 +430,71 @@ def apply_take_game_turn(
         ),
     }
 
+def update_game_session(
+    *,
+    game_id: str,
+    label: str | None = None,
+    status: str | None = None,
+    games_collection: Collection | None = None,
+) -> dict[str, Any]:
+    """
+    Update manager-owned game metadata.
+
+    This does not mutate canonical game state or revision. Revision remains
+    the concurrency guard for actual gameplay transitions.
+    """
+    game_id = _normalize_game_id(game_id)
+
+    updates: dict[str, Any] = {}
+
+    if label is not None:
+        if not isinstance(label, str) or not label.strip():
+            raise GameValidationError(
+                "Game label must be a non-empty string."
+            )
+
+        updates["label"] = label.strip()
+
+    if status is not None:
+        if status not in {"active", "archived"}:
+            raise GameValidationError(
+                "Game status must be 'active' or 'archived'."
+            )
+
+        updates["status"] = status
+
+    if not updates:
+        raise GameValidationError(
+            "No supported game fields were supplied."
+        )
+
+    collection = games_collection or _games_collection()
+
+    updates["updated_at"] = _utcnow()
+
+    updated_game = collection.find_one_and_update(
+        {"game_id": game_id},
+        {"$set": updates},
+        return_document=ReturnDocument.AFTER,
+    )
+
+    if updated_game is None:
+        raise GameNotFoundError(
+            f"Game '{game_id}' does not exist."
+        )
+
+    return _public_game_projection(
+        updated_game,
+        include_state=False,
+    )
 
 def archive_game_session(
     game_id: str,
     *,
     games_collection: Collection | None = None,
 ) -> dict[str, Any]:
-    """
-    Soft-close a game rather than deleting its history/world state.
-    """
-    collection = games_collection or _games_collection()
-    now = _utcnow()
-
-    updated_game = collection.find_one_and_update(
-        {
-            "game_id": game_id,
-            "status": "active",
-        },
-        {
-            "$set": {
-                "status": "archived",
-                "updated_at": now,
-            },
-        },
-        return_document=ReturnDocument.AFTER,
+    return update_game_session(
+        game_id=game_id,
+        status="archived",
+        games_collection=games_collection,
     )
-
-    if updated_game is None:
-        existing_game = collection.find_one({"game_id": game_id})
-
-        if existing_game is None:
-            raise GameNotFoundError(f"Game '{game_id}' does not exist.")
-
-        # Already archived is harmless and idempotent enough for v1.
-        return _public_game_projection(existing_game, include_state=True)
-
-    return _public_game_projection(updated_game, include_state=True)

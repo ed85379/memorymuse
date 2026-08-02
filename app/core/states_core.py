@@ -418,3 +418,34 @@ def update_files_state(payload: dict):
     )
 
     return updated.get("files", {})
+
+def update_game_state(payload: dict):
+    allowed_keys = {"open_game_id", "muse_plan"}
+    updates = {}
+
+    for key, value in payload.items():
+        if key not in allowed_keys:
+            continue
+
+        if key == "open_game_id":
+            # allow None to clear
+            if value is not None and not isinstance(value, str):
+                raise ValueError("open_game_id must be a string or null.")
+            updates["games.open_game_id"] = value
+
+        if key == "muse_plan":
+            # allow None to clear
+            if value is not None and not isinstance(value, str):
+                raise ValueError("muse_plan must be a string or null.")
+            updates["games.muse_plan"] = value
+
+    if not updates:
+        raise ValueError("No valid game state fields to update.")
+
+    updated = mongo_system.update_one_document(
+        collection_name=MONGO_STATES_COLLECTION,
+        filter_query={"type": STATES_DOC},  # your fixed states doc locator
+        update_data=updates
+    )
+
+    return updated.get("games", {})

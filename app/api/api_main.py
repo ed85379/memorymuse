@@ -17,6 +17,7 @@ from app.api.routers.threads_api import router as threads_router
 from app.api.routers.assets_api import router as assets_router
 from app.core.reminders.router import router as reminders_router
 from app.core.scheduler.router import router as scheduler_router
+from app.core.games.game_router import router as game_router
 from .queues import run_broadcast_queue, run_log_queue, run_index_queue, run_memory_index_queue, run_purge_queue, \
     broadcast_queue, log_queue, index_queue, index_memory_queue, purge_queue, summarization_queue, \
     run_summarization_queue
@@ -54,6 +55,7 @@ app.include_router(threads_router)
 app.include_router(assets_router)
 app.include_router(reminders_router)
 app.include_router(scheduler_router)
+app.include_router(game_router)
 
 # Register core commands
 app.state.command_registry = command_registry
@@ -63,7 +65,7 @@ register_reminder_commands(command_registry)
 # Register core tools
 app.state.tool_registry = tool_registry
 register_core_tools(tool_registry)
-#register_core_image_tools(tool_registry)
+register_core_image_tools(tool_registry)
 
 # Register core schedules
 register_reminders_schedule()

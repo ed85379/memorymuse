@@ -9,20 +9,14 @@ import {
   RefreshCw,
   Search,
   SlidersHorizontal,
-  Download,
-  Eye,
-  Clock,
-  FolderKanban,
-  Trash2,
   Pencil,
   Upload,
   X,
 } from "lucide-react";
 import { useConfig } from '@/hooks/ConfigContext';
 import { updateFilesState } from "@/utils/statesFunctions";
-import {
-  DeleteDialog,
-} from "@/components/app/Dialogs";
+import UploadAssetDialog from "./UploadAssetDialog";
+import AssetCard from "./AssetCard";
 
 function humanFileSize(bytes) {
   if (bytes === null || bytes === undefined || Number.isNaN(Number(bytes))) {
@@ -43,16 +37,6 @@ function humanFileSize(bytes) {
   } while (Math.abs(bytes) >= thresh && u < units.length - 1);
 
   return bytes.toFixed(1) + " " + units[u];
-}
-
-function formatDate(value) {
-  if (!value) return "—";
-
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return "—";
-  }
 }
 
 function normalizeAssetId(asset) {
@@ -153,10 +137,20 @@ function getAssetContentUrl(asset, variant = "original", download = false) {
   return `/api/assets/${assetId}/content${query ? `?${query}` : ""}`;
 }
 
-function isIndexableTextFile(file) {
-  if (!file?.name) return false;
-  return /\.(txt|md)$/i.test(file.name);
+
+
+function getDescription(asset) {
+  return String(asset?.description || "").trim();
 }
+
+function getDescriptionPreview(description) {
+  return description
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean) || "";
+}
+
+
 
 function sortAssets(assets, orderBy) {
   const copy = [...assets];
@@ -230,19 +224,7 @@ function StatusChip({ children, tone = "neutral", title }) {
   );
 }
 
-function sourceTone(sourceType) {
-  if (sourceType === "generated") return "violet";
-  if (sourceType === "user_upload") return "green";
-  if (sourceType === "chat_upload") return "amber";
-  return "neutral";
-}
 
-function lifecycleTone(status) {
-  if (status === "available") return "green";
-  if (status === "expired") return "amber";
-  if (status === "deleted" || status === "purged" || status === "missing") return "red";
-  return "neutral";
-}
 
 function EmptyState({ loading, error }) {
   if (loading) {
@@ -271,496 +253,9 @@ function EmptyState({ loading, error }) {
   );
 }
 
-function UploadAssetDialog({
-  open,
-  onClose,
-  projects,
-  projectsLoading,
-  onUploaded,
-}) {
-  const fileInputRef = useRef(null);
 
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [selectedProjectIds, setSelectedProjectIds] = useState([]);
-  const [indexForRecall, setIndexForRecall] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState(null);
 
-  const canIndexForRecall = isIndexableTextFile(selectedFile);
 
-  useEffect(() => {
-    if (!open) return;
-
-    setSelectedFile(null);
-    setSelectedProjectIds([]);
-    setIndexForRecall(false);
-    setDragActive(false);
-    setUploading(false);
-    setUploadError(null);
-  }, [open]);
-
-  useEffect(() => {
-    if (!canIndexForRecall) {
-      setIndexForRecall(false);
-    }
-  }, [canIndexForRecall]);
-
-  if (!open) return null;
-
-  const activeProjects = (projects || []).filter((project) => !project.archived);
-
-  const handleSelectFile = (file) => {
-    if (!file) return;
-
-    setSelectedFile(file);
-    setUploadError(null);
-
-    if (!isIndexableTextFile(file)) {
-      setIndexForRecall(false);
-    }
-  };
-
-  const handleFileInputChange = (event) => {
-    const file = event.target.files?.[0] || null;
-    handleSelectFile(file);
-  };
-
-  const handleDrop = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    setDragActive(false);
-
-    const file = event.dataTransfer.files?.[0] || null;
-    handleSelectFile(file);
-  };
-
-  const handleDragOver = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setDragActive(true);
-  };
-
-  const handleDragLeave = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setDragActive(false);
-  };
-
-  const handleProjectSelection = (event) => {
-    const ids = Array.from(event.target.selectedOptions).map((option) => option.value);
-    setSelectedProjectIds(ids);
-  };
-
-  const handleUpload = async () => {
-    if (!selectedFile || uploading) return;
-
-    setUploading(true);
-    setUploadError(null);
-
-    try {
-      const formData = new FormData();
-
-      formData.append("file", selectedFile);
-      formData.append("index_for_recall", String(indexForRecall && canIndexForRecall));
-
-      selectedProjectIds.forEach((projectId) => {
-        formData.append("project_ids", projectId);
-      });
-
-      const res = await fetch("/api/assets/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.detail || `Upload failed: HTTP ${res.status}`);
-      }
-
-      await res.json().catch(() => null);
-
-      if (onUploaded) {
-        await onUploaded();
-      }
-
-      onClose();
-    } catch (e) {
-      console.error(e);
-      setUploadError(e.message || "Upload failed.");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-zinc-700 bg-[#11111f] shadow-2xl shadow-black/60">
-        <div className="flex items-start justify-between border-b border-zinc-800 px-5 py-4">
-          <div>
-            <h2 className="text-lg font-semibold text-zinc-50">Upload Asset</h2>
-            <p className="mt-1 text-sm text-zinc-400">
-              Store a file as a first-class MemoryMuse asset. Project assignment is optional.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={uploading}
-            className="rounded-md p-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="space-y-5 px-5 py-5">
-          <div>
-            <div className="mb-2 text-sm font-medium text-zinc-200">File</div>
-
-            <div
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              className={`flex min-h-[150px] flex-col items-center justify-center rounded-xl border border-dashed px-5 py-6 text-center transition ${
-                dragActive
-                  ? "border-violet-400 bg-violet-950/30"
-                  : "border-zinc-700 bg-[#0d0d18] hover:border-violet-500/50"
-              }`}
-            >
-              <Upload
-                size={30}
-                className={dragActive ? "text-violet-200" : "text-zinc-500"}
-              />
-
-              <div className="mt-3 text-sm text-zinc-300">
-                Drop a file here, or choose one from disk.
-              </div>
-
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="mt-4 rounded-md border border-violet-500/40 px-4 py-2 text-sm font-medium text-violet-200 transition hover:bg-violet-950/40 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Choose File
-              </button>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleFileInputChange}
-                className="hidden"
-              />
-
-              {selectedFile && (
-                <div className="mt-4 max-w-full rounded-md border border-zinc-700 bg-zinc-950/70 px-3 py-2 text-left text-xs text-zinc-300">
-                  <div className="truncate font-medium text-zinc-100">
-                    {selectedFile.name}
-                  </div>
-                  <div className="mt-1 text-zinc-500">
-                    {selectedFile.type || "unknown type"} ·{" "}
-                    {humanFileSize(selectedFile.size)}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-zinc-800 bg-[#0d0d18] p-4">
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={indexForRecall}
-                disabled={!canIndexForRecall || uploading}
-                onChange={(e) => setIndexForRecall(e.target.checked)}
-                className="mt-1"
-              />
-
-              <div>
-                <div
-                  className={
-                    canIndexForRecall
-                      ? "text-sm font-medium text-zinc-100"
-                      : "text-sm font-medium text-zinc-500"
-                  }
-                >
-                  Index for recall
-                </div>
-
-                <div className="mt-1 text-xs text-zinc-500">
-                  {selectedFile
-                    ? canIndexForRecall
-                      ? "This .txt or .md file can be chunked for semantic recall."
-                      : "Only .txt and .md files can be indexed for recall right now."
-                    : "Choose a .txt or .md file to enable recall indexing."}
-                </div>
-              </div>
-            </label>
-          </div>
-
-          <div>
-            <div className="mb-2 text-sm font-medium text-zinc-200">
-              Attach to projects
-            </div>
-
-            <select
-              multiple
-              value={selectedProjectIds}
-              onChange={handleProjectSelection}
-              disabled={projectsLoading || uploading}
-              className="min-h-[140px] w-full rounded-md border border-zinc-700 bg-[#16162a] px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {activeProjects.map((project) => {
-                const projectId = getProjectId(project);
-
-                if (!projectId) return null;
-
-                return (
-                  <option key={projectId} value={projectId}>
-                    {getProjectName(project)}
-                  </option>
-                );
-              })}
-            </select>
-
-            <div className="mt-2 text-xs text-zinc-500">
-              Empty selection is valid: the asset will be general/unscoped.
-              {projectsLoading ? " Loading projects…" : ""}
-            </div>
-          </div>
-
-          {uploadError && (
-            <div className="rounded-md border border-red-900/70 bg-red-950/30 px-3 py-2 text-sm text-red-200">
-              {uploadError}
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 border-t border-zinc-800 px-5 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={uploading}
-            className="rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            onClick={handleUpload}
-            disabled={!selectedFile || uploading}
-            className="inline-flex items-center gap-2 rounded-md border border-violet-500/50 bg-violet-950/40 px-4 py-2 text-sm font-medium text-violet-100 transition hover:bg-violet-900/50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {uploading ? (
-              <LoaderCircle size={16} className="animate-spin" />
-            ) : (
-              <Upload size={16} />
-            )}
-            {uploading ? "Uploading…" : "Upload"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AssetCard({ asset, onDeleted }) {
-  const assetId = normalizeAssetId(asset);
-  const displayName = getAssetDisplayName(asset);
-  const sourceType = getSourceType(asset);
-  const assetType = getAssetType(asset);
-  const lifecycleStatus = getLifecycleStatus(asset);
-  const projectIds = normalizeProjectIds(asset);
-  const size = getAssetSize(asset);
-  const createdAt = getCreatedAt(asset);
-
-  const thumbnailUrl = getAssetContentUrl(asset, "thumbnail");
-  const openUrl = getAssetContentUrl(asset, "display");
-  const downloadUrl = getAssetContentUrl(asset, "original", true);
-
-
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deletingAsset, setDeletingAsset] = useState(null);
-
-  const handleDeleteOpen = (asset) => {
-    setDeletingAsset(asset);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!deletingAsset) return;
-
-    const assetId = normalizeAssetId(deletingAsset);
-
-    if (!assetId) {
-      console.error("Cannot delete asset with no asset ID:", deletingAsset);
-      return;
-    }
-
-    const res = await fetch(`/api/assets/${assetId}`, {
-      method: "DELETE",
-    });
-
-    if (!res.ok) {
-      throw new Error(`Failed to delete asset: HTTP ${res.status}`);
-    }
-
-    setDeleteDialogOpen(false);
-    setDeletingAsset(null);
-
-    await onDeleted?.();
-  };
-
-
-  return (
-    <div className="group flex min-h-[320px] flex-col overflow-hidden rounded-xl border border-zinc-800 bg-[#11111f] shadow-lg shadow-black/20 transition hover:border-violet-500/50 hover:bg-[#151526]">
-      <div className="relative flex h-44 items-center justify-center overflow-hidden border-b border-zinc-800 bg-black/30">
-        {isImageAsset(asset) ? (
-          <img
-            src={thumbnailUrl}
-            alt={displayName}
-            className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.02]"
-            loading="lazy"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        ) : (
-          <div className="flex flex-col items-center gap-3 text-zinc-400">
-            <AssetTypeIcon asset={asset} />
-            <span className="text-xs uppercase tracking-widest text-zinc-500">
-              {assetType}
-            </span>
-          </div>
-        )}
-
-        <div className="absolute left-3 top-3 flex flex-wrap gap-1">
-          <StatusChip tone={sourceTone(sourceType)}>{sourceType}</StatusChip>
-          <StatusChip tone={lifecycleTone(lifecycleStatus)}>
-            {lifecycleStatus}
-          </StatusChip>
-        </div>
-      </div>
-
-      <div className="flex flex-1 flex-col gap-3 p-4">
-        <div>
-          <div
-            className="line-clamp-2 break-words text-sm font-semibold text-zinc-100"
-            title={displayName}
-          >
-            {displayName}
-          </div>
-
-          <div className="mt-1 text-xs text-zinc-500" title={assetId}>
-            {assetId || "No asset id"}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
-          <div>
-            <div className="text-zinc-600">Type</div>
-            <div className="truncate">{asset?.mimetype || assetType}</div>
-          </div>
-
-          <div>
-            <div className="text-zinc-600">Size</div>
-            <div>{humanFileSize(size)}</div>
-          </div>
-
-          <div>
-            <div className="text-zinc-600">Projects</div>
-            <div>{projectIds.length}</div>
-          </div>
-
-          <div>
-            <div className="text-zinc-600">Created</div>
-            <div title={formatDate(createdAt)}>
-              {createdAt ? formatDate(createdAt) : "—"}
-            </div>
-          </div>
-        </div>
-
-        {projectIds.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {projectIds.slice(0, 3).map((pid) => (
-              <StatusChip key={pid} tone="neutral" title={pid}>
-                <FolderKanban size={11} />
-                {pid.slice(-6)}
-              </StatusChip>
-            ))}
-
-            {projectIds.length > 3 && (
-              <StatusChip tone="neutral">+{projectIds.length - 3}</StatusChip>
-            )}
-          </div>
-        )}
-
-        <div className="mt-auto flex flex-wrap gap-2 border-t border-zinc-800 pt-3">
-          <a
-            href={openUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-md border border-violet-500/40 px-2.5 py-1 text-xs text-violet-200 transition hover:bg-violet-950/40"
-          >
-            <Eye size={13} />
-            Open
-          </a>
-
-          <a
-            href={downloadUrl}
-            className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800"
-          >
-            <Download size={13} />
-            Download
-          </a>
-
-          <button
-            type="button"
-            disabled
-            title="Stub: lifecycle editing comes after PATCH endpoint"
-            className="inline-flex cursor-not-allowed items-center gap-1 rounded-md border border-zinc-800 px-2.5 py-1 text-xs text-zinc-600"
-          >
-            <Clock size={13} />
-            Lifecycle
-          </button>
-
-          <button
-            type="button"
-            disabled
-            title="Stub: rename/edit metadata comes after PATCH endpoint"
-            className="inline-flex cursor-not-allowed items-center gap-1 rounded-md border border-zinc-800 px-2.5 py-1 text-xs text-zinc-600"
-          >
-            <Pencil size={13} />
-            Edit
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleDeleteOpen(asset)}
-
-            title="Stub: delete comes after DELETE endpoint"
-            className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800"
-          >
-            <Trash2 size={13} />
-            Delete
-          </button>
-        </div>
-      </div>
-      <DeleteDialog
-        open={deleteDialogOpen}
-        onClose={() => {
-          setDeleteDialogOpen(false);
-          setDeletingAsset(null);
-        }}
-        asset={deletingAsset}
-        onDelete={handleDeleteConfirm}
-      />
-    </div>
-  );
-}
 
 export default function FilesManager() {
   const [assets, setAssets] = useState([]);
@@ -934,6 +429,23 @@ export default function FilesManager() {
       updateFilesState({ order_by: value });
   };
 
+  const handleAssetPatched = useCallback((updatedAsset) => {
+    const updatedAssetId = normalizeAssetId(updatedAsset);
+
+    if (!updatedAssetId) {
+      console.warn("PATCH returned an asset with no usable asset ID:", updatedAsset);
+      return;
+    }
+
+    setAssets((currentAssets) =>
+      currentAssets.map((asset) =>
+        normalizeAssetId(asset) === updatedAssetId
+          ? { ...asset, ...updatedAsset }
+          : asset
+      )
+    );
+  }, []);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#090913] text-zinc-100">
       <UploadAssetDialog
@@ -942,6 +454,9 @@ export default function FilesManager() {
         projects={projects}
         projectsLoading={projectsLoading}
         onUploaded={() => fetchAssets({ quiet: true })}
+        getProjectId={getProjectId}
+        getProjectName={getProjectName}
+        humanFileSize={humanFileSize}
       />
 
       <div className="border-b border-zinc-800 bg-[#11111f] px-6 py-5">
@@ -1085,7 +600,26 @@ export default function FilesManager() {
               <AssetCard
                 key={normalizeAssetId(asset)}
                 asset={asset}
+                projects={projects}
+                onPatched={handleAssetPatched}
                 onDeleted={() => fetchAssets({ quiet: true })}
+                normalizeAssetId={normalizeAssetId}
+                getAssetDisplayName={getAssetDisplayName}
+                getSourceType={getSourceType}
+                getAssetType={getAssetType}
+                getLifecycleStatus={getLifecycleStatus}
+                normalizeProjectIds={normalizeProjectIds}
+                getAssetSize={getAssetSize}
+                getCreatedAt={getCreatedAt}
+                getAssetContentUrl={getAssetContentUrl}
+                getDescription={getDescription}
+                getDescriptionPreview={getDescriptionPreview}
+                isImageAsset={isImageAsset}
+                AssetTypeIcon={AssetTypeIcon}
+                StatusChip={StatusChip}
+                humanFileSize={humanFileSize}
+                getProjectId={getProjectId}
+                getProjectName={getProjectName}
               />
             ))}
           </div>

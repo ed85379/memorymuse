@@ -220,26 +220,22 @@ def _run_openai_image_tool(
             source_type="generated_image",
             project_ids=[project_id] if project_id else None,
             lifecycle=AssetLifecycle(permanent=True),
-            provenance={
-                "provider": "openai",
-                "model": model,
-                "operation": operation,
-                "prompt": prompt,
-                "source_asset_ids": [
+            provenance=AssetProvenance(
+                source_type="generated",
+                ingested_at=datetime.utcnow(),
+                provider="openai",
+                model=model,
+                prompt=prompt,
+                source_assets=[
                     str(source_asset["_id"])
                     for source_asset in image_assets
                 ],
-                "size": image_size,
-                "quality": quality,
-                "output_format": output_format,
-                "moderation": moderation if not is_edit else None,
-                "input_fidelity": (
-                    input_fidelity
-                    if is_edit and openai_supports_input_fidelity_on_edit(model)
-                    else None
-                ),
-                "source_tool": source_tool,
-            },
+                image_size=image_size,
+                quality=quality,
+                output_format=output_format,
+                moderation=moderation if not is_edit else None,
+                created_by_tool=source_tool,
+            ),
         )
 
         created_assets.append(asset)

@@ -98,6 +98,15 @@ const ChatTab = (
     handlePinToggle,
     handleAssetPinToggle,
 
+    // Games
+    activeGameId,
+    activeGame,
+    gamePanelOpen,
+    setGamePanelOpen,
+    gameLoading,
+    gameError,
+    refreshActiveGame,
+
     // Message Actions
     createThreadWithMessages,
     multiSelectEnabled,
@@ -301,7 +310,10 @@ const ChatTab = (
           project_id,
           thread_ids: [threadId],
           metadata: {
-            assets: optimisticAssets
+            assets: optimisticAssets,
+            ...(activeGameId
+              ? { game_id: activeGameId }
+              : {}),
           }
         }
       ], ACTIVE_WINDOW_LIMIT)
@@ -320,7 +332,10 @@ const ChatTab = (
               project_id,
               thread_ids: [threadId],
               metadata: {
-                assets: optimisticAssets
+                assets: optimisticAssets,
+                ...(activeGameId
+                  ? { game_id: activeGameId }
+                  : {}),
               }
             }
           ], ACTIVE_WINDOW_LIMIT)
@@ -342,6 +357,7 @@ const ChatTab = (
         message_id,
         project_id: selectedProjectId,
         thread_id: threadId,
+        active_game_id: activeGameId || null,
         auto_assign: autoAssign,
         blend_ratio: focus,
         injected_files: injectedFiles.map(f => f.id),
@@ -379,8 +395,6 @@ const ChatTab = (
   const SCROLLBACK_LIMIT = 30;            // After scroll up
   const MAX_RENDERED_MESSAGES = 30;      // Max after scroll loading "more"
   const MESSAGE_LIMIT = 10;              // How many to load per scroll/page
-
-  const [showChessPanel, setShowChessPanel] = useState(false);
 
   const whichMessages = React.useMemo(() => {
     if (threadId) {
@@ -850,20 +864,6 @@ const ChatTab = (
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={() => setShowChessPanel(true)}
-          title="Open chess board"
-          className="
-            rounded-md border border-purple-500/40
-            bg-purple-950/30 px-2 py-1
-            text-sm text-purple-200
-            hover:bg-purple-900/60 hover:text-white
-            transition
-          "
-        >
-          ♞ Board
-        </button>
       </div>
         {/* Right side: Message actions */}
         <div className="ml-auto">
@@ -996,6 +996,14 @@ const ChatTab = (
               handleCreateThread,
               handleJoinThread,
               handleLeaveThread,
+              // Games
+              activeGameId,
+              activeGame,
+              gamePanelOpen,
+              setGamePanelOpen,
+              gameLoading,
+              gameError,
+              refreshActiveGame,
               clearSelectionAndExit,
               isSelected: selectedMessageIds.includes(msg.message_id),
               onToggleSelect: handleToggleSelect,
@@ -1277,8 +1285,12 @@ const ChatTab = (
       </div>
       </div>
       <ChessGamePanel
-        open={showChessPanel}
-        onClose={() => setShowChessPanel(false)}
+        open={gamePanelOpen}
+        onClose={() => setGamePanelOpen(false)}
+        game={activeGame}
+        loading={gameLoading}
+        error={gameError}
+        onRefresh={refreshActiveGame}
       />
     </div>
 

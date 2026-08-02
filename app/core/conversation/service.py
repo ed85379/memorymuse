@@ -143,6 +143,7 @@ async def handle_conversation_turn(data: dict, client):
                 "original_filename": name,
                 "uploaded_via": source,
                 "ingested_at": datetime.now(timezone.utc).isoformat(),
+                "origin_message_id": user_message_id,
             },
             lifecycle={
                 "permanent": False,

@@ -21,6 +21,11 @@ import PresencePanel from './PresencePanel';
 import MotdBar from './MotdBar';
 import TabbedToolPanel from './TabbedToolPanel';
 import ThreadManagerPanel from '@/components/app/ThreadManagerPanel';
+import GameManagerPanel from "@/components/app/GameManagerPanel";
+import {
+  getGameContext,
+  listGames,
+} from "@/utils/gameActions";
 import SettingsPanel from '@/components/app/SettingsPanel';
 import RemindersPanel from '@/components/app/RemindersPanel';
 import RecycleBin from './RecycleBin';
@@ -44,7 +49,17 @@ import {
   handleMultiAction,
    } from "@/utils/messageActions";
  // Icons
-import { Split, CircleX, Settings, BellRing, BrushCleaning } from "lucide-react";
+import {
+  Split,
+  CircleX,
+  Settings,
+  BellRing,
+  BrushCleaning,
+  ChessRook,
+  ChessKnight,
+  ChessQueen,
+  Dices,
+} from "lucide-react";
 
 // General props
 const TABS = [
@@ -52,6 +67,16 @@ const TABS = [
   { key: "history", label: "History" },
   { key: "thread", label: "Thread" },
   ];
+
+const GAME_MANAGER_ICONS = {
+  rook: ChessRook,
+  knight: ChessKnight,
+  queen: ChessQueen,
+  dices: Dices,
+};
+
+// Change only this line when the icon tribunal reaches a verdict.
+const GameManagerIcon = GAME_MANAGER_ICONS.knight;
 
 export default function ChatPage() {
   // General controls
@@ -139,8 +164,6 @@ export default function ChatPage() {
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [threads, setThreads] = useState([]);
   const [threadMap, setThreadMap] = useState({});
-  const [games, setGames] = useState([]);
-  const [gamesMap, setGamesMap] = useState({});
   const initialOpenThreadId = uiStates?.threads?.open_thread_id ?? "";
   const [openThreadId, setOpenThreadId] = useState(initialOpenThreadId);
   const [threadManagerOpen, setThreadManagerOpen] = useState(false)
@@ -254,23 +277,186 @@ export default function ChatPage() {
     }
   }, [uiStatesLoading, uiStates]);
 
-  const fetchGames = async () => {
-    const res = await fetch("/api/games/");
-    const data = await res.json();
-    setGames(data.games || []);
-    setGamesMap({ games: Object.fromEntries((data.games || []).map(t => [g.game_id, g]))});
-  };
-  useEffect(() => { fetchGames(); }, []);
+  const [games, setGames] = useState([]);
+  const [gamesLoading, setGamesLoading] = useState(true);
+  const [gamesError, setGamesError] = useState(null);
+
+  const initialOpenGameId =
+    uiStates?.games?.open_game_id ?? "";
+
+  const [openGameId, setOpenGameId] =
+    useState(initialOpenGameId);
+
+  const [openGame, setOpenGame] = useState(null);
+  const [openGameLoading, setOpenGameLoading] =
+    useState(false);
+
+  const [openGameError, setOpenGameError] =
+    useState(null);
+
+  const [gameManagerOpen, setGameManagerOpen] =
+    useState(false);
+
+  const [gamePanelOpen, setGamePanelOpen] =
+    useState(false);
+
+  const openGameIdRef = useRef(openGameId);
 
   useEffect(() => {
-    if (!uiStatesLoading) {
-      if (uiStates?.games?.open_game_id) {
-        setOpenThreadId(uiStates.games.open_game_id);
-      }
+    openGameIdRef.current = openGameId;
+  }, [openGameId]);
+
+
+  const gamesMap = useMemo(
+    () => ({
+      games: Object.fromEntries(
+        (games || []).map((game) => [
+          game.game_id,
+          game,
+        ])
+      ),
+    }),
+    [games]
+  );
+
+
+  const fetchGames = useCallback(async () => {
+    setGamesLoading(true);
+    setGamesError(null);
+
+    try {
+      const nextGames = await listGames({
+        status: "all",
+        limit: 200,
+      });
+
+      setGames(nextGames);
+      return nextGames;
+    } catch (error) {
+      console.error("Failed to load games:", error);
+
+      setGamesError(
+        error.message || "Failed to load games."
+      );
+
+      return [];
+    } finally {
+      setGamesLoading(false);
     }
+  }, []);
+
+
+  const refreshOpenGame = useCallback(
+    async (gameId) => {
+      if (!gameId) {
+        setOpenGame(null);
+        setOpenGameError(null);
+        return null;
+      }
+
+      setOpenGameLoading(true);
+      setOpenGameError(null);
+
+      try {
+        const game = await getGameContext(gameId);
+        setOpenGame(game);
+
+        setGames((previous) => {
+          const index = previous.findIndex(
+            (item) => item.game_id === game.game_id
+          );
+
+          if (index === -1) {
+            return [game, ...previous];
+          }
+
+          const next = [...previous];
+
+          next[index] = {
+            ...next[index],
+            ...game,
+          };
+
+          return next;
+        });
+
+        return game;
+      } catch (error) {
+        console.error(
+          "Failed to load active game:",
+          error
+        );
+
+        setOpenGame(null);
+
+        setOpenGameError(
+          error.message ||
+            "Failed to load the active game."
+        );
+
+        return null;
+      } finally {
+        setOpenGameLoading(false);
+      }
+    },
+    []
+  );
+
+
+  useEffect(() => {
+    fetchGames();
+  }, [fetchGames]);
+
+
+  useEffect(() => {
+    if (uiStatesLoading) return;
+
+    setOpenGameId(
+      uiStates?.games?.open_game_id ?? ""
+    );
   }, [uiStatesLoading, uiStates]);
 
 
+  useEffect(() => {
+    if (!openGameId) {
+      setOpenGame(null);
+      setOpenGameError(null);
+      return;
+    }
+
+    refreshOpenGame(openGameId);
+  }, [openGameId, refreshOpenGame]);
+
+
+  const handleOpenGame = useCallback((gameId) => {
+    setOpenGameId(gameId);
+    setGamePanelOpen(true);
+
+    updateGamesState({
+      open_game_id: gameId,
+    });
+  }, []);
+
+
+  const handleClearOpenGame = useCallback(() => {
+    setOpenGameId("");
+    setOpenGame(null);
+    setOpenGameError(null);
+    setGamePanelOpen(false);
+
+    updateGamesState({
+      open_game_id: null,
+    });
+  }, []);
+
+
+  const openGameSummary =
+    openGame ||
+    gamesMap.games[openGameId] ||
+    null;
+
+  const openGameTitle =
+    openGameSummary?.label || "Games";
 
   const visibleTabs = TABS.filter(tab =>
     tab.key === "thread" ? !!openThreadId: true
@@ -614,6 +800,20 @@ export default function ChatPage() {
             break;
           }
 
+          case "game_state_updated": {
+            const gameId = data.game_id;
+
+            fetchGames();
+
+            if (
+              gameId &&
+              gameId === openGameIdRef.current
+            ) {
+              refreshOpenGame(gameId);
+            }
+
+            break;
+          }
           // later:
           // case "avatar_update":
           //   setAvatarUrl(data.message);
@@ -832,6 +1032,7 @@ export default function ChatPage() {
               }
             };
 
+
             return (
               <div
                 key={tab.key}
@@ -891,12 +1092,8 @@ export default function ChatPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      // however you currently toggle the manager
-                      if (threadManagerOpen) {
-                        setThreadManagerOpen(false);
-                      } else {
-                        setThreadManagerOpen(true);
-                      }
+                      setGameManagerOpen(false);
+                      setThreadManagerOpen((previous) => !previous);
                       // optional: ensure we're on the thread tab when manager opens
                       //setActiveTab("thread");
                       //updateNavState({ main_tab: "thread" });
@@ -910,7 +1107,79 @@ export default function ChatPage() {
               </div>
             );
           })}
+          <div
+            className={`
+              flex items-center
+                  px-4 py-2 rounded-t-lg border-b-2 transition-all
+              ${
+                openGameId
+                  ? "border-purple-400 text-purple-200 font-bold bg-neutral-900"
+                  : "border-transparent text-purple-400 hover:bg-neutral-900/50"
+              }
+            `}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                if (openGameId) {
+                  setGamePanelOpen(true);
+                } else {
+                  setThreadManagerOpen(false);
+                  setGameManagerOpen((previous) => !previous);
+                }
+              }}
+              className="
+                inline-flex items-center gap-1.5
+                px-2 py-1 text-sm
+                text-neutral-300
+                hover:text-purple-100
+              "
+              title={
+                openGameId
+                  ? "Open active game table"
+                  : "Open Game Manager"
+              }
+            >
+              <GameManagerIcon className="w-4 h-4 translate-y-[1px]" />
 
+              <span className="max-w-[180px] truncate border-transparent text-purple-400 hover:bg-neutral-900/50">
+                {openGameId ? openGameTitle : "Games"}
+              </span>
+            </button>
+
+            {openGameId && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleClearOpenGame();
+                }}
+                className="
+                  p-1 text-neutral-500
+                  hover:text-neutral-200
+                "
+                title="Clear active game"
+              >
+                <CircleX className="h-3.5 w-3.5" />
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setThreadManagerOpen(false);
+                setGameManagerOpen((previous) => !previous);
+              }}
+              className="
+                px-1.5 py-1 text-xs
+                text-neutral-400
+                hover:text-neutral-100
+              "
+              title="Open Game Manager"
+            >
+              ▼
+            </button>
+          </div>
 
 
           <div className="ml-auto">
@@ -1076,6 +1345,19 @@ export default function ChatPage() {
           />
         </div>
         )}
+        {gameManagerOpen && (
+          <div className="absolute left-52 top-28 z-20 mt-0 flex justify-end">
+            <GameManagerPanel
+              games={games}
+              setGames={setGames}
+              fetchGames={fetchGames}
+              setGameManagerOpen={setGameManagerOpen}
+              openGameId={openGameId}
+              onOpenGame={handleOpenGame}
+              onClearOpenGame={handleClearOpenGame}
+            />
+          </div>
+        )}
       {/* Sub-tab content */}
       {activeTab === "chat" && (
         <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0 px-6">
@@ -1131,6 +1413,17 @@ export default function ChatPage() {
               onCreateThread={handleCreateThread}
               onJoinThread={handleJoinThread}
               onLeaveThread={handleLeaveThread}
+
+              // Games
+              activeGameId={openGameId}
+              activeGame={openGame}
+              gamePanelOpen={gamePanelOpen}
+              setGamePanelOpen={setGamePanelOpen}
+              gameLoading={openGameLoading}
+              gameError={openGameError}
+              refreshActiveGame={() =>
+                refreshOpenGame(openGameId)
+              }
 
               // Message Actions
               createThreadWithMessages={createThreadWithMessages}
@@ -1257,6 +1550,17 @@ export default function ChatPage() {
               setInjectedAssets={setInjectedAssets}
               handlePinToggle={handlePinToggle}
               handleAssetPinToggle={handleAssetPinToggle}
+
+              // Games
+              activeGameId={openGameId}
+              activeGame={openGame}
+              gamePanelOpen={gamePanelOpen}
+              setGamePanelOpen={setGamePanelOpen}
+              gameLoading={openGameLoading}
+              gameError={openGameError}
+              refreshActiveGame={() =>
+                refreshOpenGame(openGameId)
+              }
 
               // Message Actions
               createThreadWithMessages={createThreadWithMessages}

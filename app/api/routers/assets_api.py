@@ -8,12 +8,14 @@ from app.databases.mongo_connector import mongo
 from app.core.assets_core import (
     list_assets,
     AssetLifecycle,
+    AssetPatchRequest,
     create_local_asset_from_bytes,
     index_asset_text_for_recall,
     is_text_asset_mimetype,
     mark_asset_recall_indexed,
-    asset_for_ui,
+    asset_doc_to_listing_item,
     soft_delete_asset,
+    edit_asset_fields,
 )
 
 router = APIRouter(
@@ -147,6 +149,7 @@ async def upload_asset(
             filename=filename,
             mimetype=mimetype,
             source_type="user_upload",
+            injection_enabled=True,
             project_ids=project_ids or [],
             lifecycle=AssetLifecycle(
                 status="available",
@@ -170,7 +173,7 @@ async def upload_asset(
                 "num_chunks": len(message_ids),
             })
 
-        return {"asset": asset_for_ui(asset_doc)}
+        return {"asset": asset_doc_to_listing_item(asset_doc)}
 
     except HTTPException:
         raise
@@ -183,3 +186,21 @@ async def delete_asset(asset_id: str):
         asset_id,
         deleted_by="user",
     )
+
+@router.patch("/{asset_id}")
+async def patch_asset(
+    asset_id: str,
+    payload: AssetPatchRequest,
+):
+    try:
+        updated_asset = edit_asset_fields(
+            asset_id,
+            payload.model_dump(exclude_unset=True),
+        )
+
+        return {
+            "asset": asset_doc_to_listing_item(updated_asset),
+        }
+
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))

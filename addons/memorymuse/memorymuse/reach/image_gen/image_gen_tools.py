@@ -419,4 +419,4 @@ TOOL_REGISTRY = {
 def register_tools(registry):
     for name, handler in TOOL_REGISTRY.items():
         print(f"Registering Image Gen Tool: {name}")
-        registry.register(name, handler)
+        #registry.register(name, handler)
