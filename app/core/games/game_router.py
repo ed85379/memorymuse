@@ -130,6 +130,7 @@ def get_game(game_id: str):
     """
     try:
         game = game_service.get_game_context(game_id)
+        print(f'DEBUG: {game}')
 
         return {
             "game": serialize_doc(game),

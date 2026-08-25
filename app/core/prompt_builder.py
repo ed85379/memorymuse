@@ -20,6 +20,8 @@ from app.core.muse_profile import muse_profile
 from app.services.feeds import get_dot_status, get_openweathermap, get_space_weather
 from app.core.time_location_utils import _load_user_location, get_local_human_time, is_quiet_hour, user_data
 from app.core.assets_core import find_living_asset_by_id, read_asset_base64
+from app.core.games.game_service import render_game_prompt_contexts
+from app.core.context_formatting import format_context_entry
 
 def collect_prompt_context(**context_kwargs):
     # Set user locality
@@ -57,6 +59,9 @@ def collect_prompt_context(**context_kwargs):
     recent_count = context_kwargs.get("recent_count", 10)
     public = context_kwargs.get("public", False)
     due_reminders = context_kwargs.get("due_reminders", "")
+    active_game_id = context_kwargs.get("active_game_id", "")
+    applied_turn_results = context_kwargs.get("applied_turn_results", [])
+    game_panel_open = context_kwargs.get("game_panel_open", False)
 
     return {
         "local_timestamp": local_timestamp,
@@ -84,6 +89,9 @@ def collect_prompt_context(**context_kwargs):
         "recent_count": recent_count,
         "public": public,
         "due_reminders": due_reminders,
+        "active_game_id": active_game_id,
+        "applied_turn_results": applied_turn_results,
+        "game_panel_open": game_panel_open,
     }
 
 
@@ -225,6 +233,7 @@ class PromptBuilder:
                 unsummarized_only=ctx["unsummarized_only"],
                 proj_code_intensity=ctx["project_code_intensity"],
                 public=ctx["public"],
+                game_panel_open=ctx["game_panel_open"],
             )
 
             messages_meta = payload.get("_meta", {})
@@ -357,6 +366,18 @@ class PromptBuilder:
                 f"{user_input.rstrip()}\n"
                 f"{current_footer}"
             )
+
+            rendered_game_context = render_game_prompt_contexts(
+                applied_turn_results=ctx.get("applied_turn_results"),
+                game_panel_open=ctx.get("game_panel_open"),
+                active_game_id=ctx.get("active_game_id"),
+            )
+
+            if rendered_game_context:
+                current_user_message += (
+                    "\n\n[Application-provided game context for this turn]\n"
+                    f"{rendered_game_context}"
+                )
         else:
             current_user_message = user_input.rstrip()
 
@@ -718,13 +739,14 @@ class PromptBuilder:
                            blend_ratio,
                            thread_id=None,
                            message_ids_to_exclude=[],
-                           final_top_k=15,
-                           recent_count=10,
+                           final_top_k=20,
+                           recent_count=20,
                            extended_history=False,
                            unsummarized_only=True,
                            public: bool = False,
                            proj_code_intensity="MIXED",
                            sources=utils.SOURCES_CONTEXT,
+                           game_panel_open=False,
                            ):
         # Pull recents
         recent_entries = memory_core.get_immediate_context(
@@ -828,7 +850,7 @@ class PromptBuilder:
 
             formatted_semantic_entries = []
             for e in deduped_semantic:
-                formatted_entry = utils.format_context_entry(
+                formatted_entry = format_context_entry(
                     e,
                     project_lookup=project_lookup,
                     asset_lookup=asset_lookup,
@@ -854,11 +876,12 @@ class PromptBuilder:
             })
             formatted_ambient_entries = []
             for e in filtered_ambient_entries:
-                formatted_entry = utils.format_context_entry(
+                formatted_entry = format_context_entry(
                     e,
                     project_lookup=project_lookup,
                     proj_code_intensity=proj_code_intensity,
                     purpose="RECENT",
+                    game_panel_open=game_panel_open,
                 )
                 formatted_ambient_entries.append(formatted_entry)
                 recent_message_parts.append({
@@ -880,11 +903,12 @@ class PromptBuilder:
 
             formatted_recent_entries = []
             for e in recent_entries:
-                formatted_entry = utils.format_context_entry(
+                formatted_entry = format_context_entry(
                     e,
                     project_lookup=project_lookup,
                     proj_code_intensity=proj_code_intensity,
                     purpose="RECENT",
+                    game_panel_open=game_panel_open,
                 )
                 formatted_recent_entries.append(formatted_entry)
                 recent_message_parts.append({
@@ -922,12 +946,13 @@ class PromptBuilder:
             }
 
             for e in extended_entries:
-                formatted_entry = utils.format_context_entry(
+                formatted_entry = format_context_entry(
                     e,
                     project_lookup=project_lookup,
                     proj_code_intensity=proj_code_intensity,
                     purpose="RECENT",
                     search_memory_id=objectid_lookup.get(e.get("message_id")),
+                    game_panel_open=game_panel_open,
                 )
                 extended_history_message_parts.append({
                     "role": utils.normalize_role(e.get("role")),

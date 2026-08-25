@@ -35,7 +35,9 @@ import {
   Bell,
   BellOff,
   MessageCircleMore,
-  MessageCircleX
+  MessageCircleX,
+  ChessPawn,
+  X,
   } from 'lucide-react';
 function HistoryOffIcon(props) {
   return (
@@ -106,6 +108,8 @@ const ChatTab = (
     gameLoading,
     gameError,
     refreshActiveGame,
+    turnActions = [],
+    setTurnActions,
 
     // Message Actions
     createThreadWithMessages,
@@ -160,7 +164,9 @@ const ChatTab = (
   const handleSubmit = async () => {
     if (!input.trim()) return;
 
-    // 0. Start from what we currently believe
+    const submittedTurnActions = [...turnActions];
+
+    // Start from what we currently believe
     let latestTimeSkip = uiStates?.time_skip;
 
     const thinksSkipActive =
@@ -288,6 +294,21 @@ const ChatTab = (
       ...optimisticInjectedAssets,
     ];
 
+    const optimisticTurnActionMetadata =
+      submittedTurnActions.length > 0
+        ? {
+            turn_actions: submittedTurnActions
+              .map((action) => ({
+                action_type: action.action_type,
+                message_metadata:
+                  action.message_metadata ||
+                  action.action_data?.message_metadata ||
+                  null,
+              }))
+              .filter((action) => action.message_metadata),
+          }
+        : {};
+
     // 1. Generate the message_id (async)//
     const message_id = await assignMessageId({
       timestamp,
@@ -311,9 +332,12 @@ const ChatTab = (
           thread_ids: [threadId],
           metadata: {
             assets: optimisticAssets,
+
             ...(activeGameId
               ? { game_id: activeGameId }
               : {}),
+
+            ...optimisticTurnActionMetadata,
           }
         }
       ], ACTIVE_WINDOW_LIMIT)
@@ -333,9 +357,12 @@ const ChatTab = (
               thread_ids: [threadId],
               metadata: {
                 assets: optimisticAssets,
+
                 ...(activeGameId
                   ? { game_id: activeGameId }
                   : {}),
+
+                ...optimisticTurnActionMetadata,
               }
             }
           ], ACTIVE_WINDOW_LIMIT)
@@ -358,6 +385,8 @@ const ChatTab = (
         project_id: selectedProjectId,
         thread_id: threadId,
         active_game_id: activeGameId || null,
+        game_panel_open: gamePanelOpen || false,
+        turn_actions: submittedTurnActions,
         auto_assign: autoAssign,
         blend_ratio: focus,
         injected_files: injectedFiles.map(f => f.id),
@@ -370,6 +399,7 @@ const ChatTab = (
 
     // 4. Clean up ephemerals (only keep pinned) //
     clearEphemeralFiles();
+    setTurnActions([]);
   };
 
   // ------------------------------------
@@ -996,14 +1026,6 @@ const ChatTab = (
               handleCreateThread,
               handleJoinThread,
               handleLeaveThread,
-              // Games
-              activeGameId,
-              activeGame,
-              gamePanelOpen,
-              setGamePanelOpen,
-              gameLoading,
-              gameError,
-              refreshActiveGame,
               clearSelectionAndExit,
               isSelected: selectedMessageIds.includes(msg.message_id),
               onToggleSelect: handleToggleSelect,
@@ -1191,6 +1213,70 @@ const ChatTab = (
           })}
         </div>
       )}
+      {turnActions.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {turnActions.map((action, index) => {
+            const uiDisplay =
+              action.message_metadata ||
+              action.action_data?.message_metadata ||
+              {};
+
+            const label =
+              uiDisplay.narration ||
+              action.action_type ||
+              "Drafted action";
+
+            const isChessMove =
+              action.action_type === "take_game_turn" &&
+              uiDisplay.game_type === "chess";
+
+            return (
+              <span
+                key={`${action.action_type}-${uiDisplay.game_id || "draft"}-${index}`}
+                className="
+                  flex items-center px-2 py-1 rounded-md shadow-sm
+                  text-xs font-medium select-none
+                  bg-purple-950/80 border border-purple-300/60
+                  text-purple-100 max-w-[250px] backdrop-blur-[2px]
+                "
+              >
+                {isChessMove ? (
+                  <ChessPawn
+                    className="w-4 h-4 shrink-0 mr-1 text-purple-200"
+                    strokeWidth={2}
+                  />
+                ) : (
+                  <Sparkles
+                    className="w-4 h-4 shrink-0 mr-1 text-purple-200"
+                    strokeWidth={2}
+                  />
+                )}
+
+                <span className="truncate max-w-[180px]" title={label}>
+                  {label}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTurnActions((previous) =>
+                      previous.filter((candidate) => candidate !== action)
+                    );
+                  }}
+                  aria-label={`Remove ${label}`}
+                  title="Remove drafted action"
+                  className="
+                    ml-2 text-purple-200 hover:text-red-300
+                    focus:outline-none transition
+                  "
+                >
+                  <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
       <div className="flex gap-1 items-stretch w-full">
         {/* Textarea wrapper is the flex child now */}
         <div className="relative flex-1 min-w-0">
@@ -1291,6 +1377,8 @@ const ChatTab = (
         loading={gameLoading}
         error={gameError}
         onRefresh={refreshActiveGame}
+        turnActions={turnActions}
+        setTurnActions={setTurnActions}
       />
     </div>
 

@@ -7,9 +7,8 @@ from html import unescape
 from typing import Any, Dict, List, Iterator, NamedTuple, Optional, TypedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from app.core.utils import (write_system_log,
-                            build_command_response_block,
-                            )
+from app.core.utils import write_system_log
+from app.core.context_formatting import build_command_response_block
 from app.core.time_location_utils import parse_iso_datetime
 from app.services.openai_client import get_openai_response
 from app.config import API_URL, muse_settings
@@ -28,6 +27,7 @@ class CommandResult:
     error: Optional[str] = None
     visible: str = ""    # what the filter says is visible
     hidden: Dict[str, Any] = None  # what the filter marks as hidden
+    message_metadata: Optional[Dict[str, Any]] = None # Object that will go into the message metadata
 
 def project_command_result(result: dict, schema: dict, now=None) -> dict:
     if not isinstance(result, dict):
@@ -241,12 +241,18 @@ def process_commands_in_response(
                     visible = filtered.get("visible", "") or ""
                     hidden = filtered.get("hidden", {}) or {}
 
+            message_metadata = None
+            metadata_builder = command_def.get("message_metadata")
+            if metadata_builder is not None:
+                message_metadata = metadata_builder(handler_result)
+
             results.append(CommandResult(
                 name=command_name,
                 payload=payload,
                 status="ok",
                 visible=visible,
                 hidden=hidden,
+                message_metadata=message_metadata,
             ))
             print(f"DEBUG command payload: {payload}")
             # Turn hidden dict into formatted string
@@ -764,9 +770,7 @@ async def route_user_input(
     tool_calls = result.get("tool_calls", [])
     usage = result.get("usage", [])
     assets = result.get("assets", [])
-    print(f"\nDEBUG Tool Calls:\n{tool_calls}\n\n")
-    print(f"\nDEBUG usage:\n{usage}\n\n")
-    print(f"\nDEBUG assets:\n{assets}\n\n")
+
     # Normalize muse-experience tags outside of fenced code blocks
     response = normalize_muse_experience_tags(response)
 

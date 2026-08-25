@@ -1,4 +1,4 @@
-
+# app/core/conversation/service.py
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from bson import ObjectId
@@ -15,6 +15,7 @@ from app.interfaces.websocket_server import broadcast_message
 from app.core.threads_core import get_thread_type
 from app.databases.memory_indexer import assign_message_id
 from app.core.assets_core import create_local_asset_from_base64, get_all_message_ids_for_assets, find_living_asset_by_id, asset_doc_to_ref
+from app.core.games.game_service import apply_take_game_turn, GameIdConflictError, build_turn_action_metadata
 
 async def handle_conversation_turn(data: dict, client):
     ## Shared client fields
@@ -28,6 +29,10 @@ async def handle_conversation_turn(data: dict, client):
     injected_files = data.get("injected_files", [])
     injected_assets = data.get("injected_assets", [])
     ephemeral_files = data.get("ephemeral_files", [])
+
+    active_game_id = data.get("active_game_id", "")
+    turn_actions = data.get("turn_actions", [])
+    game_panel_open = data.get("game_panel_open", False)
 
     auto_assign = data.get("auto_assign", False)
     blend_ratio = data.get("blend_ratio", 0.0)
@@ -78,35 +83,7 @@ async def handle_conversation_turn(data: dict, client):
         thread_type=thread_type,
     )
 
-    timestamp_for_context = datetime.now(timezone.utc).isoformat()
 
-    prompt_kwargs = {
-        "source": source,
-        "timestamp": timestamp_for_context,
-        "message_ids_to_exclude": message_ids_to_exclude,
-        "final_top_k": final_top_k,
-        "ephemeral_files": ephemeral_files,
-
-        ## Only relevant when in project-capable prompt type with pre-uploaded files
-        "injected_file_ids": injected_file_ids,
-        "injected_asset_ids": injected_asset_ids,
-
-        ## Only relevant when in a thread-capable prompt type
-        "extended_history": extended_history,
-        "unsummarized_only": unsummarized_only,
-
-        ## Optional project/thread UI-ish states
-        "thread_id": thread_id,
-        "project_id": project_id,
-        "blend_ratio": blend_ratio,
-        "active_project_report": active_project_report,
-    }
-
-    dev_prompt, user_assistant_messages, tool_bundle = build_prompt_for_type(
-        prompt_type=prompt_type,
-        user_input=user_input,
-        prompt_kwargs=prompt_kwargs,
-    )
 
     user_msg = {
         "message": user_input,
@@ -123,6 +100,39 @@ async def handle_conversation_turn(data: dict, client):
         user_msg["project_id"] = project_id
     if thread_id:
         user_msg["thread_id"] = thread_id
+
+    ## Ensure metadata exists before broadcasting/logging.
+    user_msg.setdefault("metadata", {})
+
+    # Run game turns
+    ## Note: Should move the bulk of this into game_service.py
+    applied_turn_results = []
+    applied_turn_metadata = []
+    for turn_action in turn_actions:
+        if turn_action.get("action_type") != "take_game_turn":
+            continue
+
+        action_data = turn_action["action_data"]
+
+        # Guard explicit game target against the room's active game.
+        supplied_game_id = action_data.get("game_id")
+        if supplied_game_id and active_game_id and supplied_game_id != active_game_id:
+            raise GameIdConflictError("Game action targets a different active game.")
+
+        result = apply_take_game_turn(
+            game_id=active_game_id or supplied_game_id,
+            expected_revision=action_data["expected_revision"],
+            action_data=action_data,
+            actor_role="user",
+        )
+        applied_turn_results.append(result)
+        #applied_turn_metadata.append(build_turn_action_metadata(result))
+        applied_turn_metadata.append(result["message_metadata"])
+
+    user_msg.setdefault("metadata", {})
+
+    if applied_turn_metadata:
+        user_msg["metadata"]["turn_actions"] = applied_turn_metadata
 
     asset_refs = []
 
@@ -189,8 +199,42 @@ async def handle_conversation_turn(data: dict, client):
         )
 
     if asset_refs:
-        user_msg.setdefault("metadata", {})
         user_msg["metadata"]["assets"] = asset_refs
+
+    timestamp_for_context = datetime.now(timezone.utc).isoformat()
+
+    prompt_kwargs = {
+        "source": source,
+        "timestamp": timestamp_for_context,
+        "message_ids_to_exclude": message_ids_to_exclude,
+        "final_top_k": final_top_k,
+        "ephemeral_files": ephemeral_files,
+
+        ## Only relevant when in project-capable prompt type with pre-uploaded files
+        "injected_file_ids": injected_file_ids,
+        "injected_asset_ids": injected_asset_ids,
+
+        ## Only relevant when in a thread-capable prompt type
+        "extended_history": extended_history,
+        "unsummarized_only": unsummarized_only,
+
+        ## Optional project/thread UI-ish states
+        "thread_id": thread_id,
+        "project_id": project_id,
+        "blend_ratio": blend_ratio,
+        "active_project_report": active_project_report,
+
+        ## Optional game states
+        "active_game_id": active_game_id,
+        "applied_turn_results": applied_turn_results,
+        "game_panel_open": game_panel_open,
+    }
+
+    dev_prompt, user_assistant_messages, tool_bundle = build_prompt_for_type(
+        prompt_type=prompt_type,
+        user_input=user_input,
+        prompt_kwargs=prompt_kwargs,
+    )
 
     if broadcast_user:
         await broadcast_queue.put(user_msg)
@@ -200,8 +244,10 @@ async def handle_conversation_turn(data: dict, client):
         project_id=project_id,
         thread_id=thread_id,
         thread_type=thread_type,
+        active_game_id=active_game_id,
+        applied_turn_results=applied_turn_results,
     )
-
+    #print(f"DEBUG: {user_assistant_messages}")
     result, final_text = await run_model_turns_with_optional_followup(
         dev_prompt=dev_prompt,
         user_assistant_messages=user_assistant_messages,
@@ -219,6 +265,8 @@ async def handle_conversation_turn(data: dict, client):
 
     response_timestamp = datetime.now(timezone.utc).isoformat()
 
+    command_metadata = merge_message_metadata_updates(result.cmd_results)
+
     muse_msg = {
         "message": final_text,
         "timestamp": response_timestamp,
@@ -229,6 +277,7 @@ async def handle_conversation_turn(data: dict, client):
             "usage": result.usage,
             "tool_calls": result.tool_calls,
             "assets": result.assets,
+            **command_metadata,
         },
     }
 
@@ -259,6 +308,7 @@ def merge_turn_results(primary, secondary):
     primary.usage.extend(secondary.usage)
     primary.tool_calls.extend(secondary.tool_calls)
     primary.assets.extend(secondary.assets)
+    primary.cmd_results.extend(secondary.cmd_results)
 
     for index, asset in enumerate(primary.assets):
         asset["order"] = index
@@ -278,11 +328,19 @@ def get_thread_type_or_404(thread_id=None):
         raise HTTPException(status_code=404, detail="Thread not found")
     return thread_type
 
-def build_command_context(project_id, thread_id, thread_type):
+def build_command_context(
+    project_id,
+    thread_id,
+    thread_type,
+    active_game_id,
+    applied_turn_results=None,
+):
     return {
         "project_id": project_id,
         "thread_id": thread_id,
         "thread_type": thread_type if thread_id else None,
+        "active_game_id": active_game_id,
+        "applied_turn_results": applied_turn_results or [],
     }
 
 def resolve_prompt_type(prompt_type: str, thread_id=None, thread_type=None):
@@ -316,6 +374,22 @@ def build_prompt_for_type(prompt_type: str, user_input: str, prompt_kwargs: dict
         )
 
     raise ValueError(f"Unknown prompt_type: {prompt_type}")
+
+def merge_message_metadata_updates(cmd_results) -> dict:
+    merged = {}
+
+    for cmd_result in cmd_results or []:
+        update = getattr(cmd_result, "message_metadata", None)
+        if not update:
+            continue
+
+        for key, value in update.items():
+            if isinstance(value, list):
+                merged.setdefault(key, []).extend(value)
+            else:
+                merged[key] = value
+
+    return merged
 
 async def run_conversation_model_turn(
     *,

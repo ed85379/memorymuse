@@ -16,9 +16,9 @@ from app.services.openai_client import continuity_openai_client
 from app.core.utils import (write_system_log,
                             serialize_doc,
                             stringify_datetimes,
-                            build_command_response_block,
                             _load_user_location,
                             )
+from app.core.context_formatting import build_command_response_block
 
 def user_tz():
     loc = _load_user_location()

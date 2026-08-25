@@ -63,7 +63,8 @@ def search_memory(
     """
     import textwrap
 
-    from app.core.utils import format_context_entry, build_project_lookup, build_asset_lookup
+    from app.core.utils import build_project_lookup, build_asset_lookup
+    from app.core.context_formatting import format_context_entry
     from app.core.memory_core import search_memory_semantic, get_immediate_context
     from app.databases.mongo_connector import mongo
 

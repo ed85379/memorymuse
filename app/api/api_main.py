@@ -32,6 +32,7 @@ from app.core.scheduler.scheduler_core import start_scheduler, stop_scheduler
 from app.core.reminders.scheduler_tasks import register_scheduler_tasks as register_reminders_schedule
 from app.core.reminders.commands import register_reminder_commands
 from app.core.initiative.scheduler_tasks import register_scheduler_tasks as register_initiative_schedule
+from app.core.games.game_commands import register_game_commands
 
 print("MODULE REGISTRY ID:", id(command_registry))
 
@@ -61,6 +62,7 @@ app.include_router(game_router)
 app.state.command_registry = command_registry
 register_core_commands(command_registry)
 register_reminder_commands(command_registry)
+register_game_commands(command_registry)
 
 # Register core tools
 app.state.tool_registry = tool_registry

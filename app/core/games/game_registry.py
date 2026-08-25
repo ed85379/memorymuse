@@ -20,6 +20,7 @@ class GameDefinition:
     game_type: str
     label: str
 
+
     create_initial_state: Callable[[dict[str, Any] | None], GameState]
 
     # Applies either an Ed/frontend turn or Iris/prepared-choice turn.
@@ -34,6 +35,17 @@ class GameDefinition:
         dict[str, Any],
     ]
 
+    # Converts the safe context_display projection into hidden prompt text.
+    render_prompt_context: Callable[[dict[str, Any], bool], str | None] | None = None
+
+    # Turns a committed turn receipt from message_metadata into a compact
+    # hidden Recent Conversation/history block.
+    render_turn_action_history: Callable[
+        [dict[str, Any]],
+        str | None,
+    ] | None = None
+
+    has_board: bool = False
 
 # ---------------------------------------------------------------------------
 # Generic validation helpers
@@ -98,17 +110,17 @@ def _validate_prepared_muse_turn(
             "prepare_muse_turn must be an object."
         )
 
-    context_display = prepared.get("context_display")
+    context = prepared.get("context")
     transitions = prepared.get("transitions")
 
-    if not isinstance(context_display, dict):
+    if not isinstance(context, dict):
         raise GameValidationError(
-            "prepare_muse_turn.context_display must be an object."
+            "prepare_muse_turn.context must be an object."
         )
 
-    if not isinstance(transitions, list) or not transitions:
+    if not isinstance(transitions, list):
         raise GameValidationError(
-            "prepare_muse_turn.transitions must be a non-empty list."
+            "prepare_muse_turn.transitions must be a list."
         )
 
     normalized_transitions: list[dict[str, Any]] = []
@@ -143,16 +155,32 @@ def _validate_prepared_muse_turn(
                 "must be a string or null."
             )
 
+        narration = transition.get("narration")
+        if narration is not None and not isinstance(narration, str):
+            raise GameValidationError(
+                f"Prepared chess transition {index}.narration "
+                "must be a string or null."
+            )
+
+        after_ascii = transition.get("after_ascii")
+        if after_ascii is not None and not isinstance(after_ascii, str):
+            raise GameValidationError(
+                f"Prepared chess transition {index}.after_ascii "
+                "must be a string or null."
+            )
+
         normalized_transitions.append({
             "move": move,
             "san": san,
             "next_state": next_state,
+            "narration": narration,
+            "after_ascii": after_ascii,
         })
 
     return {
         "prepared_for_revision": prepared_for_revision,
         "prepared_for_actor": "muse",
-        "context_display": context_display,
+        "context": context,
         "transitions": normalized_transitions,
     }
 
@@ -227,15 +255,16 @@ def apply_chess_turn(
             prepared_for_revision=expected_next_revision,
         )
 
-        ui_display = action_data.get("ui_display") or {}
+        message_metadata = action_data.get("message_metadata") or {}
 
         return {
             "state": next_state,
             "pending_muse_turn": prepared_muse_turn,
             "turn_result": {
                 "move": move,
-                "notation": ui_display.get("notation"),
+                "narration": message_metadata.get("narration"),
                 "actor": "user",
+                "message_metadata": message_metadata,
             },
         }
 
@@ -276,13 +305,27 @@ def apply_chess_turn(
             "muse_plan": muse_plan,
         }
 
+        message_metadata = {
+            "action_type": "take_game_turn",
+            "game_id": action_data.get("game_id"),
+            "game_type": "chess",
+            "turn_number": pending_muse_turn.get("prepared_for_revision") + 1,
+            "narration": transition.get("narration"),
+            "table": {
+                "side": pending_muse_turn.get("context", {}).get("side_to_move"),
+                "board_ascii": transition.get("after_ascii"),
+                "fen": next_state.get("fen"),
+            }
+        }
+
         return {
             "state": next_state,
             "pending_muse_turn": None,
             "turn_result": {
                 "move": move,
-                "notation": transition.get("san"),
+                "narration": transition.get("narration"),
                 "actor": "muse",
+                "message_metadata": message_metadata,
             },
         }
 
@@ -299,7 +342,7 @@ def build_chess_context_display(
     If it is Muse's prepared turn, expose the rich frontend-produced board
     context. Crucially, do NOT expose each successor's next_state/FEN.
 
-    If it is User's turn, basic state is enough; his browser owns local move
+    If it is User's turn, basic state is enough; the browser owns local move
     interaction and will prepare Muse's options after their next move.
     """
     state = _validate_chess_state(state)
@@ -307,14 +350,139 @@ def build_chess_context_display(
     result = {
         "fen": state["fen"],
         "muse_plan": state["muse_plan"],
-        "muse_turn_prepared": pending_muse_turn is not None,
+        "muse_turn_prepared": pending_muse_turn,
     }
 
     if pending_muse_turn is not None:
-        result.update(pending_muse_turn["context_display"])
+        result.update(pending_muse_turn["context"])
 
     return result
 
+def render_chess_prompt_context(
+    context: dict[str, Any] | None,
+    game_panel_open: bool = False,
+) -> str | None:
+    if not context:
+        return None
+
+    muse_turn_prepared = bool(context.get("muse_turn_prepared"))
+
+    # No active shared board awareness, and no Muse turn to take.
+    if not muse_turn_prepared and not game_panel_open:
+        return None
+
+    lines = [
+        "[GAME CONTEXT: CHESS]",
+        "",
+        f"Current board FEN: {context['fen']}",
+
+        "",
+        "Current strategic plan:",
+        context.get("muse_plan") or "(No active plan.)",
+        "",
+        "Board:",
+        context["ascii"],
+    ]
+
+    lines.extend([
+        "",
+        f"Last move: {context.get('preceding_move_narration') or '(Unavailable.)'}",
+    ])
+
+    if muse_turn_prepared:
+        legal_moves = context.get("legal_moves", [])
+        legal_move_keys = [
+            entry["move"]
+            for entry in legal_moves
+            if entry.get("move")
+        ]
+
+        if legal_move_keys:
+            lines.extend([
+                "",
+                "Legal moves (UCI):",
+                " ".join(legal_move_keys),
+                "",
+                f"Side to move: {context['side_to_move']}",
+                "",
+                "It is your turn. Choose exactly one move from the legal-move list.",
+                "",
+                "Play as a thoughtful, fallible human opponent—not a chess engine.",
+                "Before choosing, consider more than the move that looks immediately attractive:",
+                "- immediate threats, captures, checks, and tactical replies;",
+                "- king safety and loose or overloaded pieces;",
+                "- development, activity, and control of important squares;",
+                "- pawn structure and whether the move creates a lasting weakness;",
+                "- what Ed is likely trying to achieve on the following move;",
+                "- whether your move supports a coherent plan for the next few turns.",
+                "",
+                "Do that evaluation internally. In your visible table-talk, you may be concise,",
+                "playful, or strategic—but do not claim engine certainty or reveal hidden analysis.",
+                "",
+                "When taking your turn, you must explicitly do one of the following "
+                "with your muse_plan:",
+                "- replace the previous plan;",
+                "- revise it;",
+                "- reaffirm it in updated wording; or",
+                "- clear it with null.",
+                "",
+                "Do not leave a previous plan silently unchanged.",
+                "",
+                (
+                    'Emit: [COMMAND: take_game_turn] '
+                    '{"move": "<exact UCI legal move>", '
+                    '"muse_plan": "<replace, revise, or reaffirm your plan; or null>"} '
+                    '[/COMMAND]'
+                ),
+            ])
+        else:
+            lines.extend([
+                "",
+                "There are no legal moves. The game is over.",
+                "Do not emit a take_game_turn command.",
+            ])
+    else:
+        lines.extend([
+            "",
+            "Ed currently has the chess panel open. You are sharing awareness of the",
+            "ongoing game, but this is not an instruction to take a move.",
+            "",
+            "It is Ed's turn. Do not choose or emit a chess move.",
+            "You may naturally acknowledge or discuss the board if it is relevant to",
+            "the conversation, but do not interrupt unrelated conversation to comment on it.",
+        ])
+
+    lines.append("[/GAME CONTEXT: CHESS]")
+    return "\n".join(lines)
+
+def render_chess_turn_action_history(
+    action: dict[str, Any],
+) -> str | None:
+    table = action.get("table") or {}
+
+    narration = action.get("narration")
+    fen = action.get("fen")
+
+    if not narration and not fen:
+        return None
+
+    lines = ["[GAME HISTORY: CHESS]"]
+
+    if narration:
+        lines.extend(["", narration])
+
+    if fen:
+        lines.extend(f"Fen: {fen}")
+
+    # Optional compact board snapshot—not a full active-table packet.
+    if table.get("board_ascii"):
+        lines.extend([
+            "",
+            "Board after move:",
+            table["board_ascii"],
+        ])
+
+    return "\n".join(lines)
 
 # ---------------------------------------------------------------------------
 # Registry
@@ -324,9 +492,12 @@ GAME_TYPES: dict[str, GameDefinition] = {
     "chess": GameDefinition(
         game_type="chess",
         label="Chess",
+        has_board=True,
         create_initial_state=create_chess_initial_state,
         apply_turn=apply_chess_turn,
         build_context_display=build_chess_context_display,
+        render_prompt_context=render_chess_prompt_context,
+        render_turn_action_history=render_chess_turn_action_history,
     ),
 }
 

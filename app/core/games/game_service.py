@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -12,7 +13,7 @@ from pymongo.errors import DuplicateKeyError
 from app.config import MONGO_GAMES_COLLECTION
 
 from app.databases.mongo_connector import mongo
-
+from app.interfaces.websocket_server import broadcast_message
 from .game_registry import (
     GameValidationError,
     get_game_definition,
@@ -22,6 +23,10 @@ from .game_registry import (
 class GameNotFoundError(LookupError):
     """The requested durable game session does not exist."""
 
+class GameIdConflictError(RuntimeError):
+    """
+    The ID submitted in the turn_action does not match the currently active game.
+    """
 
 class GameRevisionConflictError(RuntimeError):
     """
@@ -91,6 +96,7 @@ def _public_game_projection(
         "game_type": game_doc["game_type"],
         "label": game_doc.get("label"),
         "status": game_doc.get("status", "active"),
+        "current_state_context": game_doc.get("current_state_context"),
         "revision": game_doc["revision"],
         "created_at": game_doc["created_at"],
         "updated_at": game_doc["updated_at"],
@@ -202,7 +208,7 @@ def get_game_context(
 
     return {
         **_public_game_projection(game_doc, include_state=True),
-        "context_display": definition.build_context_display(
+        "context": definition.build_context_display(
             game_doc["state"],
             game_doc.get("pending_muse_turn"),
         ),
@@ -255,6 +261,25 @@ def list_game_sessions(
 
     return list(cursor)
 
+def get_active_game_turn_result(applied_turn_results, active_game_id):
+    matches = [
+        action
+        for action in (applied_turn_results or [])
+        if (
+            action.get("action_type") == "take_game_turn"
+            and action.get("game_id") == active_game_id
+        )
+    ]
+
+    if not matches:
+        raise ValueError("No submitted turn action matches the active game.")
+
+    if len(matches) > 1:
+        raise ValueError(
+            "More than one submitted persistent game action targets the active game."
+        )
+
+    return matches[0]
 
 def apply_take_game_turn(
     *,
@@ -366,6 +391,17 @@ def apply_take_game_turn(
         "at": now,
     }
 
+    # This is placed into the Mongo doc to handle showing the current board
+    # context even when a move was not just made.
+    message_metadata = turn_result.get("message_metadata") or {}
+    table = message_metadata.get("table") or {}
+    current_state_context = {
+        "fen": next_state.get("fen"),
+        "muse_plan": next_state.get("muse_plan"),
+        "ascii": table.get("board_ascii"),
+        "preceding_move_narration": message_metadata.get("narration") or "",
+    }
+
     updated_game = collection.find_one_and_update(
         {
             "game_id": game_id,
@@ -377,6 +413,7 @@ def apply_take_game_turn(
                 "state": next_state,
                 "pending_muse_turn": next_pending_muse_turn,
                 "last_turn": last_turn,
+                "current_state_context": current_state_context,
                 "updated_at": now,
             },
             "$inc": {
@@ -408,6 +445,15 @@ def apply_take_game_turn(
             f"Current revision: {latest_game.get('revision')}."
         )
 
+    # Immediately broadcast to the UI to refresh the game board.
+    asyncio.create_task(broadcast_message(
+        message=game_id,
+        timestamp=str(now),
+        role=actor_role,
+        to_modality="webui",
+        payload_type="game_state_updated",
+    ))
+
     # This is the normalized accepted result that the caller can place in
     # user-message or Muse-message metadata, and use for UI reconciliation.
     return {
@@ -419,16 +465,75 @@ def apply_take_game_turn(
         "revision": updated_game["revision"],
         "operation": action_data.get("operation"),
         "turn_result": turn_result,
-        "ui_display": {
-            "notation": turn_result.get("notation"),
-            "move": turn_result.get("move"),
-            "actor": actor_role,
-        },
-        "context_display": definition.build_context_display(
+        #"ui_display": {
+        #    "notation": turn_result.get("notation"),
+        #    "move": turn_result.get("move"),
+        #    "actor": actor_role,
+        #},
+        "message_metadata": turn_result.get("message_metadata"),
+        "context": definition.build_context_display(
             updated_game["state"],
             updated_game.get("pending_muse_turn"),
         ),
     }
+
+def take_game_turn_command_handler(
+    payload,
+    *,
+    active_game_id=None,
+    applied_turn_results=None,
+    **_runtime_kwargs,
+):
+    if not active_game_id:
+        raise ValueError("No active game is available.")
+
+    if "muse_plan" not in payload:
+        raise ValueError("take_game_turn requires a muse_plan field.")
+
+    #print(f"DEBUG take game turn payload: {payload}")
+
+    applied_result = get_active_game_turn_result(
+        applied_turn_results,
+        active_game_id,
+    )
+
+    prepared = (
+        applied_result
+        .get("context", {})
+        .get("muse_turn_prepared")
+    )
+
+    if not prepared:
+        raise ValueError("No prepared Muse reply turn is available.")
+
+    if prepared.get("prepared_for_actor") != "muse":
+        raise ValueError("The prepared reply turn is not for the Muse.")
+
+    move_key = payload.get("move")
+
+    transitions_by_move = {
+        transition["move"]: transition
+        for transition in prepared.get("transitions", [])
+    }
+    selected = transitions_by_move.get(move_key)
+
+    if not selected:
+        raise ValueError(f"Move is not one of the offered legal moves: {move_key}")
+
+    prepared_revision = prepared["prepared_for_revision"]
+    return apply_take_game_turn(
+        game_id=active_game_id,
+        expected_revision=prepared_revision,
+        action_data={
+            "game_id": active_game_id,
+            "expected_revision": prepared_revision,
+            "operation": {
+                "move": move_key,
+                "muse_plan": payload["muse_plan"],
+            },
+        },
+        actor_role="muse",
+    )
 
 def update_game_session(
     *,
@@ -498,3 +603,162 @@ def archive_game_session(
         status="archived",
         games_collection=games_collection,
     )
+
+def render_game_prompt_contexts(
+    applied_turn_results: list[dict[str, Any]] | None,
+    game_panel_open: bool = False,
+    *,
+    active_game_id: str | None = None,
+) -> str | None:
+    rendered_blocks: list[str] = []
+    active_game_was_applied = False
+
+    # Fresh results are authoritative for this message. Render all of them:
+    # they may represent different games or other game-related actions.
+    for result in applied_turn_results or []:
+        game_id = result.get("game_id")
+        game_type = result.get("game_type")
+        context = result.get("context")
+
+        if not game_type or not context:
+            continue
+
+        rendered = render_game_prompt_context(
+            game_type=game_type,
+            context=context,
+            game_panel_open=game_panel_open,
+        )
+
+        if rendered:
+            rendered_blocks.append(rendered)
+
+        if active_game_id and game_id == active_game_id:
+            active_game_was_applied = True
+
+    # The active game did not have a fresh result in this message, but its
+    # panel is open. Rebuild a passive current-table view from durable state.
+    if game_panel_open and active_game_id and not active_game_was_applied:
+        active_game_context = get_game_context(
+            active_game_id,
+        )
+
+        current_state_context = (
+                active_game_context.get("current_state_context") or {}
+        )
+
+        if current_state_context:
+            rendered = render_game_prompt_context(
+                game_type=active_game_context["game_type"],
+                context=current_state_context,
+                game_panel_open=True,
+            )
+
+            if rendered:
+                rendered_blocks.append(rendered)
+
+    return "\n\n".join(rendered_blocks) or None
+
+def render_game_prompt_context(
+    *,
+    game_type: str,
+    context: dict[str, Any],
+    game_panel_open: bool = False,
+) -> str | None:
+    """
+    Render a safe game-context projection into prompt-visible text.
+
+    `context_display` is supplied by the game's own authoritative
+    context-building path. It may come from persisted game context or
+    a just-applied turn result.
+    """
+    definition = get_game_definition(game_type)
+
+    if definition.render_prompt_context is None:
+        return None
+
+    return definition.render_prompt_context(
+        context,
+        game_panel_open,
+    )
+
+def get_game_current_state_context(
+    game_id: str,
+    *,
+    games_collection: Collection | None = None,
+) -> dict[str, Any]:
+    collection = games_collection or _games_collection()
+    game_doc = collection.find_one({"game_id": game_id})
+
+    game_context = game_doc.get("current_state_context") or {}
+
+    return game_context
+
+## No longer used. metadata comes back whole. No longer a projection.
+def build_turn_action_metadata(receipt: dict) -> dict:
+    return {
+        "action_type": receipt["action_type"],
+        "game_id": receipt["game_id"],
+        "game_type": receipt["game_type"],
+        "actor": receipt["actor"],
+        "previous_revision": receipt["previous_revision"],
+        "revision": receipt["revision"],
+        "operation": receipt.get("operation"),
+        "turn_result": receipt.get("turn_result"),
+        "ui_display": receipt.get("ui_display"),
+    }
+
+def format_game_metadata_for_history(
+    message_metadata: dict[str, Any] | None,
+) -> str | None:
+    turn_actions = (message_metadata or {}).get("turn_actions") or []
+    rendered_actions: list[str] = []
+
+    for action in turn_actions:
+        game_type = action.get("game_type")
+        if not game_type:
+            continue
+
+        definition = get_game_definition(game_type)
+        renderer = definition.render_turn_action_history
+
+        if not renderer:
+            continue
+
+        rendered = renderer(action)
+        if rendered:
+            rendered_actions.append(rendered)
+
+    return "\n\n".join(rendered_actions) or None
+
+# game_history.py (or wherever the game-aware context helpers live)
+
+def format_turn_actions_for_history(
+    turn_actions: list[dict],
+    *,
+    game_panel_open: bool = False,
+) -> str | None:
+    rendered_actions: list[str] = []
+
+    for action in turn_actions:
+        print(f"ACTION: {action}")
+        game_type = action.get("game_type")
+        if not game_type:
+            continue
+
+        definition = get_game_definition(game_type)
+        renderer = definition.render_turn_action_history
+        print(f"RENDERER: {renderer}")
+        if not renderer:
+            continue
+
+        # Future gate belongs here, not in generic context formatting.
+        print(f"HAS BOARD: {definition.has_board}")
+        if definition.has_board and not game_panel_open:
+            continue
+
+        rendered = renderer(action)
+        print(f"RENDERED: {rendered}")
+        if rendered:
+            rendered_actions.append(rendered)
+
+    return "\n\n".join(rendered_actions) or None

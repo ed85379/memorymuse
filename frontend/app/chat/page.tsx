@@ -171,6 +171,7 @@ export default function ChatPage() {
   const [assetsLoading, setAssetsLoading] = useState(true);
   const [assetsRefreshing, setAssetsRefreshing] = useState(true);
   const [assetsError, setAssetsError] = useState(null);
+  const [turnActions, setTurnActions] = useState([]);
 
   const fetchProjects = async () => {
     const res = await fetch("/api/projects");
@@ -197,7 +198,7 @@ export default function ChatPage() {
     setAssetsError(null);
 
     try {
-      const res = await fetch(`/api/assets/?lifecycle_status=available&limit=200`);
+      const res = await fetch(`/api/assets/?lifecycle_status=available&limit=300`);
 
       if (!res.ok) {
         throw new Error(`Failed to load assets: HTTP ${res.status}`);
@@ -347,8 +348,11 @@ export default function ChatPage() {
 
 
   const refreshOpenGame = useCallback(
+
     async (gameId) => {
+      console.log("[refreshOpenGame entered]", { gameId });
       if (!gameId) {
+        console.log("[refreshOpenGame aborted: no gameId]");
         setOpenGame(null);
         setOpenGameError(null);
         return null;
@@ -734,12 +738,20 @@ export default function ChatPage() {
               });
             }
 
+          /*  const gameId = openGameIdRef.current;
+            const turnActions = metadata?.turn_actions ?? [];
+
+            const affectsOpenGame = turnActions.some(
+              (action) => action.game_id === gameId
+            );
+
+            if (gameId && affectsOpenGame) {
+              refreshOpenGame(gameId);
+            }
+          */
             setThinking(false);
-            if (data.type === "muse_message") {
-              const incoming = data.message;
-              if (audioControls.audioResponseRef.current) {
-                audioControls.audioResponseRef.current(incoming);
-              }
+            if (audioControls.audioResponseRef.current) {
+              audioControls.audioResponseRef.current(data.message);
             }
             break;
           }
@@ -801,15 +813,21 @@ export default function ChatPage() {
           }
 
           case "game_state_updated": {
-            const gameId = data.game_id;
+            const gameId = data.message;
+            const openGameId = openGameIdRef.current;
+            const matchesOpenGame = gameId === openGameId;
+
+            console.log("[game_state_updated]", {
+              gameId,
+              openGameId,
+              matchesOpenGame,
+              raw: data,
+            });
 
             fetchGames();
 
-            if (
-              gameId &&
-              gameId === openGameIdRef.current
-            ) {
-              refreshOpenGame(gameId);
+            if (gameId && matchesOpenGame) {
+              void refreshOpenGame(gameId);
             }
 
             break;
@@ -1424,6 +1442,8 @@ export default function ChatPage() {
               refreshActiveGame={() =>
                 refreshOpenGame(openGameId)
               }
+              turnActions={turnActions}
+              setTurnActions={setTurnActions}
 
               // Message Actions
               createThreadWithMessages={createThreadWithMessages}
@@ -1561,6 +1581,8 @@ export default function ChatPage() {
               refreshActiveGame={() =>
                 refreshOpenGame(openGameId)
               }
+              turnActions={turnActions}
+              setTurnActions={setTurnActions}
 
               // Message Actions
               createThreadWithMessages={createThreadWithMessages}
