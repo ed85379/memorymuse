@@ -287,6 +287,64 @@ function FileAsset({ asset }) {
   );
 }
 
+function gameIconForType(gameType) {
+  switch (gameType) {
+    case "chess":
+      return "♟";
+    default:
+      return "🎲";
+  }
+}
+
+function GameTurnOutput({ turnActions }) {
+  if (!Array.isArray(turnActions)) return null;
+
+  const gameTurns = turnActions.filter(
+    (action) => action?.action_type === "take_game_turn"
+  );
+
+  if (gameTurns.length === 0) return null;
+
+  return (
+    <div className="mt-3 space-y-2">
+      {gameTurns.map((action, index) => {
+        const narration = action.narration || "Game turn recorded.";
+        const boardAscii = action.table?.board_ascii;
+
+        return (
+          <div
+            key={`${action.game_id || "game"}-${index}`}
+            className="rounded-md border border-purple-500/25 bg-neutral-950/35 px-3 py-2"
+          >
+            <div className="flex items-start gap-2 text-sm text-purple-100">
+              <span
+                className="mt-[1px] select-none text-base leading-none"
+                title={action.game_type || "game"}
+              >
+                {gameIconForType(action.game_type)}
+              </span>
+
+              <div className="min-w-0 leading-snug">{narration}</div>
+            </div>
+
+            {boardAscii && (
+              <details className="mt-2 text-xs">
+                <summary className="cursor-pointer select-none text-purple-300 hover:text-purple-200">
+                  Show board
+                </summary>
+
+                <pre className="mt-2 overflow-x-auto rounded border border-neutral-800 bg-neutral-950 px-3 py-2 font-mono text-[0.72rem] leading-relaxed text-neutral-300 whitespace-pre">
+                  {boardAscii}
+                </pre>
+              </details>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // --- 3. Main MessageItem ---
 
 const MessageItem = React.memo(
@@ -599,6 +657,9 @@ const MessageItem = React.memo(
 
               return null;
             })}
+
+            <GameTurnOutput turnActions={msg.metadata?.turn_actions} />
+
             {msg.metadata?.assets?.length > 0 && (
               <div className="message-assets">
                 {[...msg.metadata.assets]
