@@ -110,9 +110,12 @@ export default function ProjectsPanel({
       {project && (() => {
         const projectAssets = assetsByProjectId[project._id] || [];
 
+        /*
         const displayedAssets = projectAssets.filter(
           assetFile => assetFile.source_type === "user_upload"
         );
+        */
+        const displayedAssets = projectAssets
 
         return (
         <>

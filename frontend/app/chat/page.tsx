@@ -198,7 +198,7 @@ export default function ChatPage() {
     setAssetsError(null);
 
     try {
-      const res = await fetch(`/api/assets/?lifecycle_status=available&limit=300`);
+      const res = await fetch(`/api/assets/?lifecycle_status=available&injection_only=true`);
 
       if (!res.ok) {
         throw new Error(`Failed to load assets: HTTP ${res.status}`);

@@ -815,6 +815,7 @@ def build_asset_list_query(
     source_type: str | None = None,
     asset_type: str | None = None,
     lifecycle_status: str | None = "available",
+    injection_only: bool = False,
 ) -> dict:
     query: dict = {}
 
@@ -867,6 +868,12 @@ def build_asset_list_query(
                 "project_mode must be 'general', 'linked', 'only', or 'exclude'"
             )
 
+    if injection_only:
+        query["$or"] = [
+            {"source_type": "user_upload"},
+            {"injection_enabled": True},
+        ]
+
     return query
 
 def list_assets(
@@ -876,8 +883,7 @@ def list_assets(
     source_type: str | None = None,
     asset_type: str | None = None,
     lifecycle_status: str | None = "available",
-    limit: int = 100,
-    skip: int = 0,
+    injection_only: bool = False,
 ) -> dict:
     query = build_asset_list_query(
         project_id=project_id,
@@ -885,17 +891,13 @@ def list_assets(
         source_type=source_type,
         asset_type=asset_type,
         lifecycle_status=lifecycle_status,
+        injection_only=injection_only,
     )
-
-    limit = max(1, min(limit, 500))
-    skip = max(0, skip)
 
     assets = mongo.find_documents(
         collection_name=MONGO_ASSETS_COLLECTION,
         query=query,
         sort=[("created_at", -1)],
-        skip=skip,
-        limit=limit,
     )
 
     return {
@@ -907,8 +909,7 @@ def list_assets(
             "source_type": source_type,
             "asset_type": asset_type,
             "lifecycle_status": lifecycle_status,
-            "limit": limit,
-            "skip": skip,
+            "injection_only": injection_only,
         },
     }
 

@@ -328,8 +328,10 @@ export default function FilesManager() {
       if (lifecycleStatus) params.set("lifecycle_status", lifecycleStatus);
       if (projectMode) params.set("project_mode", projectMode);
 
-      params.set("limit", "200");
+      /* Old params. Keeping this as an example for future params.
+      params.set("limit", "300");
       params.set("skip", "0");
+      */
 
       const query = params.toString();
       const res = await fetch(`/api/assets/${query ? `?${query}` : ""}`);

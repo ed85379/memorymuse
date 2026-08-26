@@ -33,8 +33,7 @@ def list_assets_endpoint(
     source_type: str | None = None,
     asset_type: str | None = None,
     lifecycle_status: str | None = "available",
-    limit: int = 100,
-    skip: int = 0,
+    injection_only: bool = False,
 ):
     try:
         result = list_assets(
@@ -43,8 +42,7 @@ def list_assets_endpoint(
             source_type=source_type,
             asset_type=asset_type,
             lifecycle_status=lifecycle_status,
-            limit=limit,
-            skip=skip,
+            injection_only=injection_only,
         )
         return result
 
