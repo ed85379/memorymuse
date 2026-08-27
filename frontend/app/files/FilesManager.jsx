@@ -18,6 +18,8 @@ import { updateFilesState } from "@/utils/statesFunctions";
 import UploadAssetDialog from "./UploadAssetDialog";
 import AssetCard from "./AssetCard";
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
 function humanFileSize(bytes) {
   if (bytes === null || bytes === undefined || Number.isNaN(Number(bytes))) {
     return "—";
@@ -276,17 +278,24 @@ export default function FilesManager() {
   const [projectMode, setProjectMode] = useState("");
   const [searchText, setSearchText] = useState("");
   const [orderBy, setOrderBy] = useState("newest");
+  const [pageSize, setPageSize] = useState(25);
+  const [currentPage, setCurrentPage] = useState(1);
 
 
   useEffect(() => {
     if (uiStatesLoading) return;
 
     const saved = uiStates?.files || {};
+    const savedPageSize = Number(saved.page_size);
 
     setSourceType(saved.source_type || "");
     setAssetType(saved.asset_type || "");
     setLifecycleStatus(saved.lifecycle_status || "available");
+    setProjectMode(saved.project_mode || "");
     setOrderBy(saved.order_by || "newest");
+    setPageSize(
+      PAGE_SIZE_OPTIONS.includes(savedPageSize) ? savedPageSize : 25
+    );
 
     setFilesStateHydrated(true);
   }, [uiStatesLoading, uiStates]);
@@ -321,20 +330,7 @@ export default function FilesManager() {
     setError(null);
 
     try {
-      const params = new URLSearchParams();
-
-      if (sourceType) params.set("source_type", sourceType);
-      if (assetType) params.set("asset_type", assetType);
-      if (lifecycleStatus) params.set("lifecycle_status", lifecycleStatus);
-      if (projectMode) params.set("project_mode", projectMode);
-
-      /* Old params. Keeping this as an example for future params.
-      params.set("limit", "300");
-      params.set("skip", "0");
-      */
-
-      const query = params.toString();
-      const res = await fetch(`/api/assets/${query ? `?${query}` : ""}`);
+      const res = await fetch("/api/assets/");
 
       if (!res.ok) {
         throw new Error(`Failed to load assets: HTTP ${res.status}`);
@@ -352,7 +348,7 @@ export default function FilesManager() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [sourceType, assetType, lifecycleStatus, projectMode]);
+  }, []);
 
   useEffect(() => {
     fetchProjects();
@@ -360,44 +356,102 @@ export default function FilesManager() {
 
   useEffect(() => {
     if (!filesStateHydrated) return;
-
     fetchAssets();
-  }, [
-    filesStateHydrated,
-    sourceType,
-    assetType,
-    lifecycleStatus,
-    orderBy,
-  ]);
-
+  }, [filesStateHydrated, fetchAssets]);
 
 
   const filteredAssets = useMemo(() => {
     const needle = searchText.trim().toLowerCase();
 
-    let result = assets;
+    const result = assets.filter((asset) => {
+      if (sourceType && getSourceType(asset) !== sourceType) {
+        return false;
+      }
 
-    if (needle) {
-      result = assets.filter((asset) => {
-        const haystack = [
-          normalizeAssetId(asset),
-          getAssetDisplayName(asset),
-          asset?.filename,
-          asset?.mimetype,
-          getSourceType(asset),
-          getAssetType(asset),
-          getLifecycleStatus(asset),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
+      if (assetType && getAssetType(asset) !== assetType) {
+        return false;
+      }
 
-        return haystack.includes(needle);
-      });
-    }
+      if (
+        lifecycleStatus &&
+        getLifecycleStatus(asset) !== lifecycleStatus
+      ) {
+        return false;
+      }
+
+      const projectIds = normalizeProjectIds(asset);
+
+      if (projectMode === "unscoped" && projectIds.length > 0) {
+        return false;
+      }
+
+      if (projectMode === "attached" && projectIds.length === 0) {
+        return false;
+      }
+
+      if (!needle) {
+        return true;
+      }
+
+      const haystack = [
+        normalizeAssetId(asset),
+        getAssetDisplayName(asset),
+        asset?.filename,
+        asset?.mimetype,
+        getSourceType(asset),
+        getAssetType(asset),
+        getLifecycleStatus(asset),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(needle);
+    });
 
     return sortAssets(result, orderBy);
-  }, [assets, searchText, orderBy]);
+  }, [
+    assets,
+    sourceType,
+    assetType,
+    lifecycleStatus,
+    projectMode,
+    searchText,
+    orderBy,
+  ]);
+
+  const pageCount = Math.max(
+    1,
+    Math.ceil(filteredAssets.length / pageSize)
+  );
+
+  const activePage = Math.min(currentPage, pageCount);
+
+  const pageStart = (activePage - 1) * pageSize;
+
+  const pagedAssets = useMemo(
+    () => filteredAssets.slice(pageStart, pageStart + pageSize),
+    [filteredAssets, pageStart, pageSize]
+  );
+
+  const visibleFrom = filteredAssets.length ? pageStart + 1 : 0;
+
+  const visibleTo = Math.min(
+    pageStart + pageSize,
+    filteredAssets.length
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    sourceType,
+    assetType,
+    lifecycleStatus,
+    projectMode,
+    searchText,
+    orderBy,
+    pageSize,
+  ]);
 
   const counts = useMemo(() => {
     const result = {
@@ -429,6 +483,22 @@ export default function FilesManager() {
   const handleOrderBySelect = (value) => {
       setOrderBy(value);
       updateFilesState({ order_by: value });
+  };
+
+  const handleProjectModeSelect = (value) => {
+    setProjectMode(value);
+    updateFilesState({ project_mode: value });
+  };
+
+  const handlePageSizeSelect = (value) => {
+    const nextPageSize = Number(value);
+
+    if (!PAGE_SIZE_OPTIONS.includes(nextPageSize)) {
+      return;
+    }
+
+    setPageSize(nextPageSize);
+    updateFilesState({ page_size: nextPageSize });
   };
 
   const handleAssetPatched = useCallback((updatedAsset) => {
@@ -504,7 +574,11 @@ export default function FilesManager() {
           <StatusChip tone="green">User uploads: {counts.userUploads}</StatusChip>
           <StatusChip tone="amber">Chat uploads: {counts.chatUploads}</StatusChip>
           <StatusChip tone="neutral">Images: {counts.images}</StatusChip>
-          {searchText && <StatusChip tone="neutral">Shown: {counts.shown}</StatusChip>}
+          {counts.shown !== counts.total && (
+            <StatusChip tone="neutral">
+              Matching: {counts.shown}
+            </StatusChip>
+          )}
         </div>
       </div>
 
@@ -570,7 +644,7 @@ export default function FilesManager() {
 
           <select
             value={projectMode}
-            onChange={(e) => setProjectMode(e.target.value)}
+            onChange={(e) => handleProjectModeSelect(e.target.value)}
             className="rounded-md border border-zinc-700 bg-[#16162a] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-500"
           >
             <option value="">All Project States</option>
@@ -590,6 +664,23 @@ export default function FilesManager() {
             <option value="size_desc">Largest First</option>
             <option value="size_asc">Smallest First</option>
           </select>
+          <label className="flex items-center gap-2 text-xs text-zinc-500">
+            <span className="whitespace-nowrap uppercase tracking-wider">
+              Per page
+            </span>
+
+            <select
+              value={pageSize}
+              onChange={(e) => handlePageSizeSelect(e.target.value)}
+              className="rounded-md border border-zinc-700 bg-[#16162a] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-500"
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
 
@@ -597,8 +688,9 @@ export default function FilesManager() {
         {loading || error || showEmpty ? (
           <EmptyState loading={loading} error={error} />
         ) : (
+          <>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {filteredAssets.map((asset) => (
+            {pagedAssets.map((asset) => (
               <AssetCard
                 key={normalizeAssetId(asset)}
                 asset={asset}
@@ -625,6 +717,38 @@ export default function FilesManager() {
               />
             ))}
           </div>
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 pt-4">
+            <div className="text-sm text-zinc-500">
+              Showing {visibleFrom}–{visibleTo} of {filteredAssets.length}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={activePage <= 1}
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Previous
+              </button>
+
+              <span className="min-w-24 text-center text-sm text-zinc-400">
+                Page {activePage} of {pageCount}
+              </span>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setCurrentPage((page) => Math.min(pageCount, page + 1))
+                }
+                disabled={activePage >= pageCount}
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+          </>
         )}
       </main>
 

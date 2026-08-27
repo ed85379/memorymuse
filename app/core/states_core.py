@@ -397,15 +397,15 @@ def update_nav_state(payload: dict):
     return updated.get("nav", {})
 
 def update_files_state(payload: dict):
-    allowed_keys = {"source_type", "asset_type", "lifecycle", "order_by"}
+    allowed_keys = {"source_type", "asset_type", "lifecycle_status", "order_by", "project_mode", "page_size"}
     updates = {}
 
     for key, value in payload.items():
         if key not in allowed_keys:
             continue
 
-        if value is not None and not isinstance(value, str):
-            raise ValueError(f"{key} must be a string or null.")
+        if value is not None and not isinstance(value, (str, int)):
+            raise ValueError(f"{key} must be a string, integer, or null.")
         updates[f"files.{key}"] = value
 
     if not updates:
