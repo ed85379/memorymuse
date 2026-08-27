@@ -90,14 +90,10 @@ const ChatTab = (
     selectedProjectId,
     focus,
     autoAssign,
-    injectedFiles,
-    files,
     assetsByProjectId,
     assetsById,
-    setInjectedFiles,
     injectedAssets,
     setInjectedAssets,
-    handlePinToggle,
     handleAssetPinToggle,
 
     // Games
@@ -191,13 +187,6 @@ const ChatTab = (
       console.error("Error refreshing time_skip:", err);
     }
 
-    const allFiles = [
-      ...injectedFiles,
-    ];
-
-    const filenamesBlock = allFiles.length
-      ? '\n' + allFiles.map(f => `[file: ${f.name}]`).join('\n')
-      : '';
     const timestamp = toPythonIsoString();
     const role = "user";
     const source = "webui";
@@ -389,7 +378,6 @@ const ChatTab = (
         turn_actions: submittedTurnActions,
         auto_assign: autoAssign,
         blend_ratio: focus,
-        injected_files: injectedFiles.map(f => f.id),
         injected_assets: injectedAssets.map(a => a.id),
         ephemeral_files: ephemeralPayload,
         source: "webui",
@@ -687,10 +675,6 @@ const ChatTab = (
     }
   };
 
-  const safeInjectedFiles = Array.isArray(injectedFiles)
-    ? injectedFiles
-    : [];
-
   const safeInjectedAssets = Array.isArray(injectedAssets)
     ? injectedAssets
     : [];
@@ -704,21 +688,6 @@ const ChatTab = (
       file: f.file,
       source: "ephemeral",
     })),
-
-    ...safeInjectedFiles.map(({ id: fileId, pinned }) => {
-      const file = files.find(f => f.id === fileId);
-      if (!file) return null;
-
-      return {
-        id: fileId,
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        pinned,
-        source: "injected",
-        file,
-      };
-    }),
 
     ...safeInjectedAssets.map(({ id: assetId, pinned }) => {
       const asset = assetsById[assetId];
@@ -742,7 +711,6 @@ const ChatTab = (
   ].filter(Boolean);
 
   const clearEphemeralFiles = () => {
-    setInjectedFiles(prev => prev.filter(f => f.pinned));
     setInjectedAssets(prev => prev.filter(a => a.pinned));
     setEphemeralFiles([]);
   };
@@ -1147,8 +1115,6 @@ const ChatTab = (
                   onClick={() => {
                     if (f.source === "ephemeral") {
                       setEphemeralFiles(files => files.filter(x => x.id !== f.id));
-                    } else if (f.source === "injected") {
-                      setInjectedFiles(prev => prev.filter(x => x.id !== f.id));
                     } else {
                       setInjectedAssets(prev => prev.filter(x => x.id !== f.id));
                     }

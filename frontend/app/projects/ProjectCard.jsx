@@ -6,14 +6,12 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import {Eye, EyeOff, DoorClosed, DoorClosedLocked, SquarePlus, SquarePen, Archive, ArchiveX} from 'lucide-react';
 import ProjectDetailsCard from "./ProjectDetailsCard";
 import ProjectFacts from "./ProjectFacts";
-import ProjectFiles from "./ProjectFiles";
 
 
 
 const TABS = [
   {key: "details", label: "Details"},
   {key: "facts", label: "Facts"},
-  {key: "files", label: "Files"},
 ];
 
 const MAX_LENGTH_NAME = 40;
@@ -227,43 +225,6 @@ export default function ProjectCard(props) {
 
   const handleEdit = (field) => setEditing(e => ({...e, [field]: true}));
 
-  async function handleUpload(file, projectIds, refreshFiles, onProgress) {
-    setIsProcessing(true);
-    setUploadPercent(0);
-
-      const res = await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", "/api/files/upload");
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            const response = JSON.parse(xhr.responseText);
-            setLastUploadedFileId(response.file_id);
-            resolve(response);
-          } else {
-            reject(new Error(`Upload failed (${xhr.status})`));
-          }
-        };
-        xhr.onerror = () => reject(new Error("Network error during upload"));
-        xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable && onProgress) {
-            const percent = Math.round((event.loaded / event.total) * 100);
-            onProgress(percent);
-          }
-        };
-
-        const formData = new FormData();
-        formData.append("file", file);
-        // Only include project_ids if you want to attach to projects
-        if (projectIds && projectIds.length > 0) {
-          formData.append("project_ids", JSON.stringify(projectIds));
-        }
-        xhr.send(formData);
-      });
-
-      if (refreshFiles) await refreshFiles();
-      setIsProcessing(false);
-      setUploadPercent(0);
-  }
 
   return (
     <div
@@ -474,17 +435,6 @@ export default function ProjectCard(props) {
         )}
         {tab === "facts" && (
           <ProjectFacts project={project} {...rest} />
-        )}
-        {tab === "files" && (
-          <ProjectFiles
-            projects={projects}
-            project={project}
-            onUpload={handleUpload}
-            uploadPercent={uploadPercent}
-            setUploadPercent={setUploadPercent}
-            isProcessing={isProcessing}
-            {...rest}
-          />
         )}
       </div>
     </div>

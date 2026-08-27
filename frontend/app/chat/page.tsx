@@ -875,23 +875,18 @@ export default function ChatPage() {
   const [project, setProject] = useState(null);
   const [focus, setFocus] = useState(0.5);
   const [autoAssign, setAutoAssign] = useState(false);
-  const [injectedFiles, setInjectedFiles] = useState([]);
   const [injectedAssets, setInjectedAssets] = useState([]);
 
   // Ephemeral file controls
   const [ephemeralFiles, setEphemeralFiles] = useState([]);
   const [editingEphemeralId, setEditingEphemeralId] = useState(null);
   const [ephemeralNameDraft, setEphemeralNameDraft] = useState("");
-  const [files, setFiles] = useState([]);
-  const [filesLoading, setFilesLoading] = useState(false);
-  const [filesError, setFilesError] = useState(null);
 
   // On project select: fetch project doc (read-only)
   useEffect(() => {
     if (!selectedProjectId) {
       setProject(null);
 
-      setInjectedFiles([]);
       setInjectedAssets([]);
       return;
     }
@@ -901,7 +896,6 @@ export default function ChatPage() {
       .then(data => {
         setProject(data.project || data);
 
-        setInjectedFiles([]);
         setInjectedAssets([]);
       });
 
@@ -919,54 +913,6 @@ export default function ChatPage() {
 
   }, [selectedProjectId]);
 
-  // Fetch files for this project (special endpoint)
-  const fetchFiles = useCallback(() => {
-    if (!selectedProjectId) {
-      setFiles([]);
-      setFilesLoading(false);
-      setFilesError(null);
-      return;
-    }
-    setFilesLoading(true);
-    setFilesError(null);
-    fetch(`/api/projects/${selectedProjectId}/files`)
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then(data => {
-        const files = (data.files || []).map(f => ({
-          id: f._id,
-          name: f.filename || f.name || "",
-          mimetype: f.mimetype || "application/octet-stream",
-          size: f.size || 0,
-          caption: f.caption || "",
-          uploaded_on: f.uploaded_on || "",
-          description: f.description || "",
-          tags: f.tags || [],
-        }));
-        setFiles(files);
-        setFilesLoading(false);
-      })
-      .catch(() => {
-        setFilesError("Failed to load files.");
-        setFiles([]);
-        setFilesLoading(false);
-      });
-  }, [selectedProjectId]);
-
-  // Refetch files whenever project changes
-  useEffect(() => {
-    fetchFiles();
-  }, [fetchFiles]);
-
-  const handlePinToggle = fid => {
-    setInjectedFiles(prev =>
-      prev.map(f =>
-        f.id === fid ? { ...f, pinned: !f.pinned } : f
-      )
-    );
-  };
   const handleAssetPinToggle = aid => {
     setInjectedAssets(prev =>
       prev.map(a =>
@@ -1419,14 +1365,10 @@ export default function ChatPage() {
               selectedProjectId={selectedProjectId}
               focus={focus}
               autoAssign={autoAssign}
-              injectedFiles={injectedFiles}
-              files={files}
               assetsByProjectId={assetsByProjectId}
               assetsById={assetsById}
-              setInjectedFiles={setInjectedFiles}
               injectedAssets={injectedAssets}
               setInjectedAssets={setInjectedAssets}
-              handlePinToggle={handlePinToggle}
               handleAssetPinToggle={handleAssetPinToggle}
               onCreateThread={handleCreateThread}
               onJoinThread={handleJoinThread}
@@ -1500,17 +1442,8 @@ export default function ChatPage() {
               setFocus={setFocus}
               autoAssign={autoAssign}
               setAutoAssign={setAutoAssign}
-              injectedFiles={injectedFiles}
-              setInjectedFiles={setInjectedFiles}
               injectedAssets={injectedAssets}
               setInjectedAssets={setInjectedAssets}
-              fetchFiles={fetchFiles}
-              files={files}
-              setFiles={setFiles}
-              filesLoading={filesLoading}
-              setFilesLoading={setFilesLoading}
-              filesError={filesError}
-              handlePinToggle={handlePinToggle}
               handleAssetPinToggle={handleAssetPinToggle}
             />
             </div>
@@ -1561,14 +1494,10 @@ export default function ChatPage() {
               selectedProjectId={selectedProjectId}
               focus={focus}
               autoAssign={autoAssign}
-              injectedFiles={injectedFiles}
-              files={files}
               assetsByProjectId={assetsByProjectId}
               assetsById={assetsById}
-              setInjectedFiles={setInjectedFiles}
               injectedAssets={injectedAssets}
               setInjectedAssets={setInjectedAssets}
-              handlePinToggle={handlePinToggle}
               handleAssetPinToggle={handleAssetPinToggle}
 
               // Games
@@ -1634,19 +1563,10 @@ export default function ChatPage() {
               setFocus={setFocus}
               autoAssign={autoAssign}
               setAutoAssign={setAutoAssign}
-              injectedFiles={injectedFiles}
-              setInjectedFiles={setInjectedFiles}
               injectedAssets={injectedAssets}
               setInjectedAssets={setInjectedAssets}
-              fetchFiles={fetchFiles}
-              files={files}
               assetsByProjectId={assetsByProjectId}
               assetsById={assetsById}
-              setFiles={setFiles}
-              filesLoading={filesLoading}
-              setFilesLoading={setFilesLoading}
-              filesError={filesError}
-              handlePinToggle={handlePinToggle}
               handleAssetPinToggle={handleAssetPinToggle}
             />
             </div>

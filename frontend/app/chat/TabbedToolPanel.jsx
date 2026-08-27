@@ -40,15 +40,8 @@ export default function TabbedToolPanel(
     setFocus,
     autoAssign,
     setAutoAssign,
-    injectedFiles,
-    setInjectedFiles,
     setInjectedAssets,
     injectedAssets,
-    files,
-    fetchFiles,
-    filesLoading,
-    setFilesLoading,
-    filesError,
     handlePinToggle,
     handleAssetPinToggle,
     threads,
@@ -102,15 +95,8 @@ export default function TabbedToolPanel(
             setFocus={setFocus}
             autoAssign={autoAssign}
             setAutoAssign={setAutoAssign}
-            injectedFiles={injectedFiles}
-            setInjectedFiles={setInjectedFiles}
             injectedAssets={injectedAssets}
             setInjectedAssets={setInjectedAssets}
-            files={files}
-            fetchFiles={fetchFiles}
-            filesLoading={filesLoading}
-            setFilesLoading={setFilesLoading}
-            filesError={filesError}
             handlePinToggle={handlePinToggle}
             handleAssetPinToggle={handleAssetPinToggle}
           />

@@ -16,15 +16,8 @@ export default function ProjectsPanel({
   setFocus,
   autoAssign,
   setAutoAssign,
-  injectedFiles,
-  setInjectedFiles,
   injectedAssets,
   setInjectedAssets,
-  files,
-  fetchFiles,
-  filesLoading,
-  setFilesLoading,
-  filesError,
   handlePinToggle,
   handleAssetPinToggle,
 }) {
@@ -45,16 +38,6 @@ export default function ProjectsPanel({
     });
   };
 
-  const handleInjectToggle = (fid, name) => {
-    setInjectedFiles(prev => {
-      const exists = prev.find(f => f.id === fid);
-      if (exists) {
-        return prev.filter(f => f.id !== fid);
-      } else {
-        return [...prev, { id: fid, name, pinned: false }];
-      }
-    });
-  };
 
   const handleAssetInjectToggle = (aid, name) => {
     setInjectedAssets(prev => {
@@ -67,8 +50,6 @@ export default function ProjectsPanel({
     });
   };
 
-  const isInjected = fid => injectedFiles.some(f => f.id === fid);
-  const isPinned = fid => injectedFiles.some(f => f.id === fid && f.pinned);
   const isAssetInjected = aid => injectedAssets.some(a => a.id === aid);
   const isAssetPinned = aid => injectedAssets.some(a => a.id === aid && a.pinned);
 
@@ -160,14 +141,14 @@ export default function ProjectsPanel({
           <div className="flex items-center mb-2 font-semibold text-purple-300">
             <span>Files in Project:</span>
             {
-              filesLoading ? (
+              assetsLoading ? (
                 <svg className="ml-2 animate-spin h-5 w-5 text-purple-400" /* ...spinner SVG... */ />
             ) : (
             <button
               type="button"
               className="ml-2 p-1 rounded hover:bg-neutral-800 transition-colors"
               title="Refresh file list"
-              onClick={fetchFiles}
+              onClick={fetchAssets}
               aria-label="Refresh file list"
             >
               <RefreshCw size={18} className="text-purple-400 hover:rotate-90 transition-transform" />
@@ -175,62 +156,6 @@ export default function ProjectsPanel({
             )
           }
           </div>
-          {filesLoading && <div className="text-neutral-500">Loading files…</div>}
-          {filesError && <div className="text-red-400">{filesError}</div>}
-          <ul className="space-y-1">
-            {files.map(file => {
-              const injected = isInjected(file.id);
-              const pinned = isPinned(file.id);
-
-              return (
-                <li key={file.id} className="flex items-center gap-2 text-neutral-200">
-                  <span className="flex-1">
-                    {file.name}
-                    {file.size ? (
-                      <span className="ml-2 text-neutral-500 text-xs">
-                        {humanFileSize(file.size)}
-                      </span>
-                    ) : null}
-                  </span>
-                  {/* Inject/Remove Toggle */}
-                  <button
-                    className={`px-2 py-0.5 rounded text-xs font-semibold
-                      ${injected
-                        ? "bg-purple-600 text-purple-100"
-                        : "bg-neutral-800 text-purple-300 hover:bg-purple-600 hover:text-purple-100"
-                      }`}
-                    onClick={() => handleInjectToggle(file.id, file.name)}
-                    type="button"
-                  >
-                    {injected ? "Injected" : "Inject"}
-                  </button>
-                  {/* Pin Toggle — only enabled if injected */}
-                  <button
-                    className={`px-2 py-0.5 rounded text-xs font-semibold flex items-center
-                      ${pinned
-                        ? "bg-purple-700 text-purple-100 border border-purple-300"
-                        : "bg-neutral-700 text-purple-200 hover:bg-purple-600 hover:text-purple-100"
-                      }
-                      ${!injected ? "opacity-50 cursor-not-allowed" : ""}
-                    `}
-                    onClick={() => injected && handlePinToggle(file.id)}
-                    disabled={!injected}
-                    type="button"
-                    aria-label={pinned ? `Unpin ${file.name}` : `Pin ${file.name}`}
-                    title={pinned ? "Unpin file (keeps it only for this session)" : "Pin file (make persistent until unpinned)"}
-                  >
-                    <Pin className={`w-4 h-4 ${pinned ? "text-purple-200" : "text-purple-400"}`} strokeWidth={2} />
-                  </button>
-                </li>
-              );
-            })}
-            {(!filesLoading && files.length === 0) && (
-              <li className="text-neutral-500">No legacy files in this project.</li>
-            )}
-          </ul>
-
-          {/* New assets */}
-
           <ul className="mt-3 space-y-1 border-t border-neutral-800 pt-3">
             {displayedAssets.map(assetFile => {
               const injected = isAssetInjected(assetFile.id);
