@@ -12,7 +12,6 @@ from app.api.routers.messages_api import router as messages_router
 from app.api.routers.memory_api import memory_router
 from app.api.routers.import_api import router as import_router
 from app.api.routers.projects_api import router as projects_router
-from app.api.routers.files_api import router as files_router
 from app.api.routers.threads_api import router as threads_router
 from app.api.routers.assets_api import router as assets_router
 from app.core.reminders.router import router as reminders_router
@@ -46,7 +45,6 @@ app.include_router(messages_router)
 app.include_router(memory_router)
 app.include_router(import_router)
 app.include_router(projects_router)
-app.include_router(files_router)
 app.include_router(states_router)
 app.include_router(uipolling_router)
 app.include_router(profile_router)

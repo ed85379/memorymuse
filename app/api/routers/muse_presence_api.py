@@ -6,7 +6,6 @@ from bson import ObjectId
 from datetime import datetime, timezone
 from app.config import JOURNAL_DIR, muse_settings
 from app.core.muse_profile import muse_profile
-from app.core.files_core import get_all_message_ids_for_files
 from app.core.utils import get_adaptive_top_k, slugify, strip_muse_private_blocks, strip_gm_notes
 from app.core.states_core import set_active_project
 from app.core.muse_responder import route_user_input

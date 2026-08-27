@@ -4,7 +4,6 @@ from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 from app.config import MONGO_FILES_COLLECTION, MONGO_PROJECTS_COLLECTION, MONGO_MEMORY_COLLECTION, MONGO_CONVERSATION_COLLECTION
 from app.core import projects_core
-from app.core.files_core import modify_file_project_link_core
 from app.core.utils import serialize_doc, ensure_list
 from app.api.queues import index_queue
 from app.databases.mongo_connector import mongo
@@ -233,19 +232,4 @@ def get_project_files(key: str):
 
     return {"files": result}
 
-@router.post("/{project_id}/files")
-async def modify_file_project_link_endpoint(project_id: str, body: dict):
-    file_id = body.get("file_id")
-    action = body.get("action", "attach")
-    if not file_id:
-        raise HTTPException(status_code=400, detail="file_id required")
-
-    result = await modify_file_project_link_core(
-        project_id,
-        file_id,
-        action,
-        mongo=mongo,
-        index_queue=index_queue,
-    )
-    return result
 

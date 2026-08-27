@@ -190,7 +190,7 @@ const ChatTab = (
     const timestamp = toPythonIsoString();
     const role = "user";
     const source = "webui";
-    const message = input + (filenamesBlock ? '\n' + filenamesBlock : '');
+    const message = input;
     // sets the project_id on the message immediately
     const project_id = (autoAssign && selectedProjectId) ? selectedProjectId : "";
     const thread_id = threadId

@@ -4,7 +4,6 @@ from fastapi.responses import JSONResponse
 from bson import ObjectId
 from datetime import datetime, timezone
 from app.config import muse_settings
-from app.core.files_core import get_all_message_ids_for_files
 from app.core.utils import get_adaptive_top_k, strip_muse_private_blocks, strip_gm_notes
 from app.core.states_core import set_active_project
 from app.core.muse_responder import route_user_input
@@ -52,7 +51,6 @@ async def handle_conversation_turn(data: dict, client):
 
     ## File/context prep
     injected_file_ids = [ObjectId(fid) for fid in injected_files]
-    message_ids_to_exclude = get_all_message_ids_for_files(injected_file_ids)
 
     injected_asset_ids = [aid for aid in injected_assets]
     message_ids_to_exclude = get_all_message_ids_for_assets(injected_asset_ids)
