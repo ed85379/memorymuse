@@ -25,6 +25,7 @@ from app.databases.memory_indexer import update_qdrant_metadata_for_messages
 
 AssetLifecycleStatus = Literal[
     "available",
+    "deleted",
     "expired",
     "purged",
     "missing",
@@ -127,9 +128,17 @@ class DownloadedAsset:
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
-def default_lifecycle() -> AssetLifecycle:
+PERMANENT_BY_DEFAULT_SOURCE_TYPES = {
+    "user_upload",
+    "generated",
+    "project_upload",   # harmless compatibility for any legacy path still alive
+    "avatar_library",
+}
+
+
+def default_lifecycle(*, source_type: str) -> AssetLifecycle:
     return AssetLifecycle(
-        permanent=False,
+        permanent=source_type in PERMANENT_BY_DEFAULT_SOURCE_TYPES,
         status="available",
     )
 
@@ -428,7 +437,7 @@ def build_asset_doc(
     elif lifecycle:
         lifecycle_doc = lifecycle
     else:
-        lifecycle_doc = default_lifecycle().to_dict()
+        lifecycle_doc = default_lifecycle(source_type=source_type).to_dict()
 
     # Ensure lifecycle timestamps exist even if caller passed a partial dict.
     lifecycle_doc.setdefault("created_at", now)
@@ -632,7 +641,19 @@ def create_local_asset_from_base64(
     )
 
 def get_asset_full_path(asset_doc: dict) -> Path:
-    relative_path = asset_doc["storage"]["path"]
+    storage = asset_doc.get("storage") or {}
+
+    if storage.get("bytes_status") != "available":
+        raise FileNotFoundError(
+            f"Asset bytes are not available: {asset_doc.get('_id')}"
+        )
+
+    relative_path = storage.get("path")
+    if not relative_path:
+        raise FileNotFoundError(
+            f"Asset has no stored byte path: {asset_doc.get('_id')}"
+        )
+
     return Path(ASSET_STORAGE_ROOT) / relative_path
 
 
@@ -1481,3 +1502,170 @@ def edit_asset_fields(asset_id, patch_fields):
     )
 
     return _serialize_asset_doc(updated)
+
+CHAT_UPLOAD_RETENTION_DAYS = 30
+ASSET_PURGE_DELAY_DAYS = 30
+
+async def soft_delete_expired_chat_uploads(
+    *,
+    retention_days: int = CHAT_UPLOAD_RETENTION_DAYS,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    """
+    Soft-delete ordinary chat uploads once their byte-retention window ends.
+
+    The asset record remains, and message asset_refs remain meaningful.
+    Physical byte removal is handled separately after the purge delay.
+    """
+    now = now or utc_now()
+    cutoff = now - timedelta(days=retention_days)
+
+    candidates = mongo.find_documents(
+        MONGO_ASSETS_COLLECTION,
+        {
+            "source_type": "chat_upload",
+            "lifecycle.status": "available",
+            "lifecycle.permanent": {"$ne": True},
+            "lifecycle.created_at": {"$lte": cutoff},
+        },
+    )
+
+    deleted = 0
+    skipped = 0
+
+    for asset in candidates:
+        result = await soft_delete_asset(
+            str(asset["_id"]),
+            deleted_by="system:chat_upload_retention",
+        )
+
+        if result.get("status") == "deleted":
+            deleted += 1
+        else:
+            skipped += 1
+
+    return {
+        "candidates": len(candidates),
+        "soft_deleted": deleted,
+        "skipped": skipped,
+    }
+
+def purge_asset_bytes(
+    asset_id: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """
+    Remove an asset's physical bytes while retaining its metadata record.
+
+    The retained document becomes a tombstone so message/history references
+    can render an expired/unavailable state instead of becoming dangling IDs.
+    """
+    asset_doc = mongo.find_one_document(
+        MONGO_ASSETS_COLLECTION,
+        {"_id": asset_id},
+    )
+
+    if not asset_doc:
+        return {
+            "status": "not_found",
+            "asset_id": asset_id,
+        }
+
+    lifecycle = asset_doc.get("lifecycle") or {}
+    storage = asset_doc.get("storage") or {}
+
+    if lifecycle.get("status") != "deleted":
+        return {
+            "status": "not_deleted",
+            "asset_id": asset_id,
+            "lifecycle_status": lifecycle.get("status"),
+        }
+
+    if storage.get("bytes_status") != "available":
+        return {
+            "status": "already_not_available",
+            "asset_id": asset_id,
+            "bytes_status": storage.get("bytes_status"),
+        }
+
+    relative_path = storage.get("path")
+
+    if relative_path:
+        full_path = get_asset_full_path(asset_doc)
+
+        try:
+            full_path.unlink()
+        except FileNotFoundError:
+            # The desired end state is still "purged"; the bytes are gone.
+            pass
+
+    now = now or utc_now()
+
+    mongo.update_one_document(
+        MONGO_ASSETS_COLLECTION,
+        {"_id": asset_id},
+        {
+            "storage.bytes_status": "purged",
+            "storage.purged_at": now,
+            "storage.path": None,
+            "storage.content_sha256": None,
+
+            "lifecycle.status": "purged",
+            "lifecycle.purged_at": now,
+            "lifecycle.updated_at": now,
+
+            "updated_at": now,
+        },
+    )
+
+    return {
+        "status": "purged",
+        "asset_id": asset_id,
+    }
+
+def purge_long_deleted_assets(
+    *,
+    purge_delay_days: int = ASSET_PURGE_DELAY_DAYS,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    now = now or utc_now()
+    cutoff = now - timedelta(days=purge_delay_days)
+
+    candidates = mongo.find_documents(
+        MONGO_ASSETS_COLLECTION,
+        {
+            "lifecycle.status": "deleted",
+            "lifecycle.deleted_at": {"$lte": cutoff},
+            "storage.bytes_status": "available",
+        },
+    )
+
+    purged = 0
+    skipped = 0
+
+    for asset in candidates:
+        result = purge_asset_bytes(
+            str(asset["_id"]),
+            now=now,
+        )
+
+        if result.get("status") == "purged":
+            purged += 1
+        else:
+            skipped += 1
+
+    return {
+        "candidates": len(candidates),
+        "purged": purged,
+        "skipped": skipped,
+    }
+
+async def run_asset_lifecycle_maintenance() -> dict[str, dict[str, int]]:
+    expired = await soft_delete_expired_chat_uploads()
+    purged = purge_long_deleted_assets()
+
+    return {
+        "expired_chat_uploads": expired,
+        "purged_assets": purged,
+    }
