@@ -1257,6 +1257,110 @@ async def soft_delete_asset(
         "message_ids_soft_deleted": message_ids,
     }
 
+async def restore_asset(
+    asset_id: str,
+    *,
+    restored_by: str | None = None,
+    permanent: bool = True,
+) -> dict[str, Any]:
+    """
+    Restore a soft-deleted asset whose stored bytes still exist.
+
+    Restoration is deliberately impossible after purge: the tombstone remains,
+    but the underlying bytes are gone.
+    """
+    asset_doc = mongo.find_one_document(
+        MONGO_ASSETS_COLLECTION,
+        {"_id": asset_id},
+    )
+
+    if not asset_doc:
+        return {
+            "status": "not_found",
+            "asset_id": asset_id,
+        }
+
+    lifecycle = asset_doc.get("lifecycle") or {}
+    storage = asset_doc.get("storage") or {}
+
+    current_status = lifecycle.get("status", "available")
+    if current_status != "deleted":
+        return {
+            "status": "not_deleted",
+            "asset_id": asset_id,
+            "lifecycle_status": current_status,
+        }
+
+    if storage.get("bytes_status") != "available":
+        return {
+            "status": "bytes_unavailable",
+            "asset_id": asset_id,
+            "bytes_status": storage.get("bytes_status"),
+        }
+
+    relative_path = storage.get("path")
+    if not relative_path:
+        return {
+            "status": "storage_path_missing",
+            "asset_id": asset_id,
+        }
+
+    full_path = get_asset_full_path(asset_doc)
+    if not full_path.is_file():
+        return {
+            "status": "storage_file_missing",
+            "asset_id": asset_id,
+        }
+
+    now = utc_now()
+    message_ids = get_asset_index_message_ids(asset_doc)
+
+    updates = {
+        "lifecycle.status": "available",
+        "lifecycle.permanent": permanent,
+        "lifecycle.deleted_at": None,
+        "lifecycle.deleted_by": None,
+        "lifecycle.restored_at": now,
+        "lifecycle.updated_at": now,
+        "updated_at": now,
+    }
+
+    if restored_by:
+        updates["lifecycle.restored_by"] = restored_by
+
+    updated_asset = mongo.update_one_document(
+        MONGO_ASSETS_COLLECTION,
+        {"_id": asset_id},
+        updates,
+    )
+
+    # Indexed text chunks are derived children of the asset. If their parent
+    # returns to the living library, they return to semantic recall too.
+    if message_ids:
+        mongo.update_many_documents(
+            MONGO_CONVERSATION_COLLECTION,
+            {
+                "message_id": {"$in": message_ids},
+                "is_deleted": True,
+            },
+            {
+                "$set": {
+                    "is_deleted": False,
+                    "updated_on": now,
+                }
+            },
+        )
+
+        # Metadata-only Qdrant update; no re-embedding required.
+        await update_qdrant_metadata_for_messages(message_ids)
+
+    return {
+        "status": "restored",
+        "asset_id": asset_id,
+        "message_ids_restored": message_ids,
+        "asset": _serialize_asset_doc(updated_asset),
+    }
+
 EDITABLE_ASSET_FIELDS = {
     "display_name",
     "description",

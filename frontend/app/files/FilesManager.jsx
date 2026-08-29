@@ -274,7 +274,7 @@ export default function FilesManager() {
   const [sourceType, setSourceType] = useState("");
 
   const [assetType, setAssetType] = useState("");
-  const [lifecycleStatus, setLifecycleStatus] = useState("available");
+  const [lifecycleStatus, setLifecycleStatus] = useState("");
   const [projectMode, setProjectMode] = useState("");
   const [searchText, setSearchText] = useState("");
   const [orderBy, setOrderBy] = useState("newest");

@@ -1,15 +1,11 @@
-
-import os
 from datetime import datetime
 import openai
-import base64
 from pathlib import Path
 from typing import Literal, IO
 from contextlib import ExitStack
-from app.core.assets_core import (
+from app.core.assets.assets_core import (
     AssetLifecycle,
     AssetProvenance,
-    create_local_asset_from_bytes,
     create_local_asset_from_base64,
     create_local_asset_from_url,
     asset_doc_to_ref,

@@ -8,13 +8,13 @@ from app.core.utils import get_adaptive_top_k, strip_muse_private_blocks, strip_
 from app.core.states_core import set_active_project
 from app.core.muse_responder import route_user_input
 from app.core.prompt_profiles import build_webui_prompt, build_scene_webui_prompt, build_discord_prompt, build_speaker_prompt
-from app.services.openai_client import api_openai_client
 from app.api.queues import broadcast_queue, log_queue
 from app.interfaces.websocket_server import broadcast_message
 from app.core.threads_core import get_thread_type
 from app.databases.memory_indexer import assign_message_id
-from app.core.assets_core import create_local_asset_from_base64, get_all_message_ids_for_assets, find_living_asset_by_id, asset_doc_to_ref
-from app.core.games.game_service import apply_take_game_turn, GameIdConflictError, build_turn_action_metadata
+from app.core.assets.assets_core import create_local_asset_from_base64, get_all_message_ids_for_assets, find_living_asset_by_id, asset_doc_to_ref
+from app.core.games.game_service import apply_take_game_turn, GameIdConflictError
+
 
 async def handle_conversation_turn(data: dict, client):
     ## Shared client fields

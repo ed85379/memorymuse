@@ -1,11 +1,10 @@
 from pathlib import Path
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form, Body
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from datetime import datetime, timezone
 from app.config import ASSET_STORAGE_ROOT, MONGO_ASSETS_COLLECTION
 from app.databases.mongo_connector import mongo
-from app.core.assets_core import (
+from app.core.assets.assets_core import (
     list_assets,
     AssetLifecycle,
     AssetPatchRequest,
@@ -15,6 +14,7 @@ from app.core.assets_core import (
     mark_asset_recall_indexed,
     asset_doc_to_listing_item,
     soft_delete_asset,
+    restore_asset,
     edit_asset_fields,
 )
 
@@ -184,6 +184,30 @@ async def delete_asset(asset_id: str):
         asset_id,
         deleted_by="user",
     )
+
+@router.post("/{asset_id}/restore")
+async def restore_asset_endpoint(asset_id: str):
+    result = await restore_asset(
+        asset_id,
+        restored_by="user",
+        permanent=True,
+    )
+
+    if result["status"] == "not_found":
+        raise HTTPException(status_code=404, detail="Asset not found.")
+
+    if result["status"] != "restored":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Asset cannot be restored: "
+                f"{result['status']}."
+            ),
+        )
+
+    return {
+        "asset": asset_doc_to_listing_item(result["asset"]),
+    }
 
 @router.patch("/{asset_id}")
 async def patch_asset(

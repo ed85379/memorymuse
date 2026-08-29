@@ -31,6 +31,7 @@ from app.core.scheduler.scheduler_core import start_scheduler, stop_scheduler
 from app.core.reminders.scheduler_tasks import register_scheduler_tasks as register_reminders_schedule
 from app.core.reminders.commands import register_reminder_commands
 from app.core.initiative.scheduler_tasks import register_scheduler_tasks as register_initiative_schedule
+from app.core.assets.scheduler_tasks import register_scheduler_tasks as register_asset_lifecycle_schedule
 from app.core.games.game_commands import register_game_commands
 
 print("MODULE REGISTRY ID:", id(command_registry))
@@ -70,6 +71,7 @@ register_core_image_tools(tool_registry)
 # Register core schedules
 register_reminders_schedule()
 register_initiative_schedule()
+register_asset_lifecycle_schedule()
 
 # Register addon commands, schedules, tools, etc
 # See addon.py under addons directory

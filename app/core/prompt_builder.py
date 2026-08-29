@@ -1,7 +1,5 @@
 # core/prompt_builder.py
-from pathlib import Path
 import base64
-import uuid
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import humanize
@@ -19,7 +17,7 @@ from app.config import muse_settings, MONGO_FILES_COLLECTION, MONGO_PROJECTS_COL
 from app.core.muse_profile import muse_profile
 from app.services.feeds import get_dot_status, get_openweathermap, get_space_weather
 from app.core.time_location_utils import _load_user_location, get_local_human_time, is_quiet_hour, user_data
-from app.core.assets_core import find_living_asset_by_id, read_asset_base64
+from app.core.assets.assets_core import find_living_asset_by_id, read_asset_base64
 from app.core.games.game_service import render_game_prompt_contexts
 from app.core.context_formatting import format_context_entry
 

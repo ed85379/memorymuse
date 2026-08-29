@@ -217,13 +217,15 @@ async def daily_window_task_runner(task: SchedulerTask) -> None:
 
     tz = ZoneInfo(LOCAL_TIMEZONE)
 
-    while True:
-        next_run_at = compute_next_daily_window_run(
-            start=start,
-            end=end,
-            tz=tz,
-        )
+    # The first run may be later today, or tomorrow if today's window has
+    # already passed.
+    next_run_at = compute_next_daily_window_run(
+        start=start,
+        end=end,
+        tz=tz,
+    )
 
+    while True:
         print(
             f"[Scheduler] {task.key} scheduled for "
             f"{next_run_at.isoformat()} in daily window {start}-{end}"
@@ -240,6 +242,15 @@ async def daily_window_task_runner(task: SchedulerTask) -> None:
                 "window_start": start,
                 "window_end": end,
             },
+        )
+
+        # Once today's run has fired, explicitly choose a new random time
+        # tomorrow—not another possibly-future time later today.
+        next_run_at = random_datetime_in_window(
+            target_date=next_run_at.date() + timedelta(days=1),
+            start=start,
+            end=end,
+            tz=tz,
         )
 
 

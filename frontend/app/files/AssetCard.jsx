@@ -6,6 +6,7 @@ import {
   Download,
   Clock,
   Trash2,
+  RotateCcw,
 } from "lucide-react";
 import {
   DeleteDialog,
@@ -91,6 +92,11 @@ export default function AssetCard({
   const description = getDescription(asset);
   const descriptionPreview = getDescriptionPreview(description);
   const lifecycle = asset?.lifecycle || {};
+  const hasAvailableBytes = asset?.storage?.bytes_status === "available";
+  const canPreviewImage = isImageAsset(asset) && hasAvailableBytes;
+  const isAvailable = lifecycleStatus === "available";
+  const isDeleted = lifecycleStatus === "deleted";
+  const canRestore = isDeleted && hasAvailableBytes;
   const activeProjects = (projects || []).filter((project) => !project.archived);
 
   const [editingName, setEditingName] = useState(false);
@@ -223,11 +229,44 @@ export default function AssetCard({
     await onDeleted?.();
   };
 
+  const restoreAsset = async () => {
+    if (!assetId || saving || !canRestore) return null;
+
+    setSaving(true);
+    setSaveError(null);
+
+    try {
+      const res = await fetch(`/api/assets/${assetId}/restore`, {
+        method: "POST",
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(
+          data?.detail || `Failed to restore asset: HTTP ${res.status}`
+        );
+      }
+
+      if (!data?.asset) {
+        throw new Error("Asset restore succeeded, but returned no asset.");
+      }
+
+      onPatched?.(data.asset);
+      return data.asset;
+    } catch (error) {
+      console.error(error);
+      setSaveError(error.message || "Failed to restore asset.");
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="group relative flex min-h-[320px] flex-col rounded-xl border border-zinc-800 bg-[#11111f] shadow-lg shadow-black/20 transition hover:border-violet-500/50 hover:bg-[#151526]">
       <div className="relative flex h-44 items-center justify-center overflow-hidden border-b border-zinc-800 bg-black/30">
-        {isImageAsset(asset) ? (
+        {canPreviewImage ? (
           <img
             src={thumbnailUrl}
             alt={displayName}
@@ -480,23 +519,34 @@ export default function AssetCard({
           </div>
         )}
         <div className="mt-auto flex flex-wrap gap-2 border-t border-zinc-800 pt-3">
-          <a
-            href={openUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-md border border-violet-500/40 px-2.5 py-1 text-xs text-violet-200 transition hover:bg-violet-950/40"
-          >
-            <Eye size={13} />
-            Open
-          </a>
+        {hasAvailableBytes ? (
+          <>
+            <a
+              href={openUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-md border border-violet-500/40 px-2.5 py-1 text-xs text-violet-200 transition hover:bg-violet-950/40"
+            >
+              <Eye size={13} />
+              Open
+            </a>
 
-          <a
-            href={downloadUrl}
-            className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800"
+            <a
+              href={downloadUrl}
+              className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800"
+            >
+              <Download size={13} />
+              Download
+            </a>
+          </>
+        ) : (
+          <span
+            title="This asset's stored bytes are no longer available"
+            className="inline-flex items-center rounded-md border border-zinc-800 px-2.5 py-1 text-xs text-zinc-600"
           >
-            <Download size={13} />
-            Download
-          </a>
+            File unavailable
+          </span>
+        )}
 
           <details className="relative">
             <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800">
@@ -539,7 +589,7 @@ export default function AssetCard({
                 <input
                   type="checkbox"
                   checked={Boolean(lifecycle.permanent)}
-                  disabled={saving}
+                  disabled={saving || !isAvailable}
                   onChange={(event) => savePatch({ permanent: event.target.checked })}
                 />
 
@@ -567,7 +617,7 @@ export default function AssetCard({
                   <input
                     type="checkbox"
                     checked={Boolean(asset?.image_source_enabled)}
-                    disabled={saving}
+                    disabled={saving || !isAvailable}
                     onChange={(event) =>
                       savePatch({ image_source_enabled: event.target.checked })
                     }
@@ -586,7 +636,7 @@ export default function AssetCard({
                 <input
                   type="checkbox"
                   checked={Boolean(asset?.injection_enabled)}
-                  disabled={saving}
+                  disabled={saving || !isAvailable}
                   onChange={(event) =>
                     savePatch({ injection_enabled: event.target.checked })
                   }
@@ -602,16 +652,37 @@ export default function AssetCard({
             </div>
           </details>
 
-          <button
-            type="button"
-            onClick={() => handleDeleteOpen(asset)}
-
-            title="Stub: delete comes after DELETE endpoint"
-            className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800"
-          >
-            <Trash2 size={13} />
-            Delete
-          </button>
+          {isDeleted ? (
+            <button
+              type="button"
+              onClick={restoreAsset}
+              disabled={saving || !canRestore}
+              title={
+                canRestore
+                  ? "Restore this asset and keep it permanently"
+                  : "This asset cannot be restored because its bytes are no longer available"
+              }
+              className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 px-2.5 py-1 text-xs text-emerald-200 transition hover:bg-emerald-950/40 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <RotateCcw size={13} />
+              Restore permanently
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleDeleteOpen(asset)}
+              disabled={saving || !isAvailable}
+              title={
+                isAvailable
+                  ? "Delete asset"
+                  : "Only available assets can be deleted"
+              }
+              className="inline-flex items-center gap-1 rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 size={13} />
+              Delete
+            </button>
+          )}
         </div>
       </div>
       <DeleteDialog
