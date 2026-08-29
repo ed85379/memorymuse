@@ -2,7 +2,7 @@
 import os
 from datetime import datetime
 
-from app.core.assets_core import (
+from app.core.assets.assets_core import (
     AssetLifecycle,
     AssetProvenance,
     create_local_asset_from_url,
