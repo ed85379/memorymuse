@@ -1773,3 +1773,34 @@ async def run_asset_lifecycle_maintenance() -> dict[str, dict[str, int]]:
         "expired_chat_uploads": expired,
         "purged_assets": purged,
     }
+
+
+def write_image_variant(
+    source_path: Path,
+    output_path: Path,
+    *,
+    max_size: tuple[int, int],
+) -> dict:
+    from PIL import Image, ImageOps
+
+    with Image.open(source_path) as image:
+        image = ImageOps.exif_transpose(image)
+        image.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+        if image.mode not in ("RGB", "RGBA"):
+            image = image.convert("RGBA")
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        image.save(
+            output_path,
+            format="WEBP",
+            quality=82,
+            method=4,
+        )
+
+        return {
+            "width": image.width,
+            "height": image.height,
+            "mimetype": "image/webp",
+            "byte_size": output_path.stat().st_size,
+        }
