@@ -32,7 +32,7 @@ def list_assets_endpoint(
     project_mode: str | None = None,
     source_type: str | None = None,
     asset_type: str | None = None,
-    lifecycle_status: str | None = "available",
+    lifecycle_status: str | None = None,
     injection_only: bool = False,
 ):
     try:
