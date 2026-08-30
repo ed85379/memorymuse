@@ -740,24 +740,20 @@ def format_turn_actions_for_history(
     rendered_actions: list[str] = []
 
     for action in turn_actions:
-        print(f"ACTION: {action}")
         game_type = action.get("game_type")
         if not game_type:
             continue
 
         definition = get_game_definition(game_type)
         renderer = definition.render_turn_action_history
-        print(f"RENDERER: {renderer}")
         if not renderer:
             continue
 
         # Future gate belongs here, not in generic context formatting.
-        print(f"HAS BOARD: {definition.has_board}")
         if definition.has_board and not game_panel_open:
             continue
 
         rendered = renderer(action)
-        print(f"RENDERED: {rendered}")
         if rendered:
             rendered_actions.append(rendered)
 

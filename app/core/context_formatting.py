@@ -211,7 +211,6 @@ def format_context_entry(
     if purpose == "RECENT":
         metadata = e.get("metadata") or {}
         turn_actions = metadata.get("turn_actions") or []
-        print(f"TURN ACTIONS: {turn_actions}")
         if turn_actions:
             print(f"GAME_PANEL_OPEN: {game_panel_open}")
             turn_history = format_turn_actions_for_history(
@@ -221,7 +220,6 @@ def format_context_entry(
 
             if turn_history:
                 msg = f"{msg}\n\n{turn_history}" if msg else turn_history
-                print(f"TURN HISTORY: {turn_history}")
 
     # --- Build lines ---
     # Line 1: "5 minutes ago - Ed said:"  (or just "Ed said:" if no htime)

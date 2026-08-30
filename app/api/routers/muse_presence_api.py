@@ -57,7 +57,6 @@ async def speaker_endpoint(request: Request, background_tasks: BackgroundTasks):
     default_top_k = 10
     min_top_k = 3
     final_top_k = get_adaptive_top_k(min_top_k, default_top_k,)
-    print(f"FINAL_TOP_K: {final_top_k}")
 
     # Call prompt_profiles to build the prompt for the frontend UI
     timestamp_for_context = datetime.now(timezone.utc).isoformat()
@@ -67,7 +66,6 @@ async def speaker_endpoint(request: Request, background_tasks: BackgroundTasks):
         timestamp=timestamp_for_context,
         final_top_k=final_top_k,
     )
-    print(f"DEVELOPER_PROMPT:\n" + dev_prompt)
 
     user_msg = {
         "message": user_input,
@@ -75,7 +73,6 @@ async def speaker_endpoint(request: Request, background_tasks: BackgroundTasks):
         "role": "user",
         "source": "smartspeaker",
     }
-    print(f"DEBUG user_msg: {user_msg}")
     await broadcast_queue.put(user_msg)
     # Get Muse's response
     result = await route_user_input(
@@ -97,7 +94,6 @@ async def speaker_endpoint(request: Request, background_tasks: BackgroundTasks):
         "source": "smartspeaker",
         "to": "smartspeaker",
     }
-    print(f"DEBUG user_msg: {muse_msg}")
 
     private_response = strip_muse_private_blocks(result.response_text)
     muse_broadcast_msg = {

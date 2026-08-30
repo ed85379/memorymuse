@@ -807,7 +807,6 @@ def search_indexed_memory(
 
 
     sorted_results = sorted(filtered_results, key=lambda x: x["score"], reverse=True)
-    print("[Final Results] Top entries after blending/filtering:")
     for i, entry in enumerate(sorted_results[:5]):
         print(
             f"  Rank {i + 1}: id={entry.get('message_id')[:6]}..., "

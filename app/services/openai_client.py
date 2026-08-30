@@ -251,7 +251,7 @@ def build_payload_for_model(model: str,
             {"role": "developer", "content": dev_content},
             *compiled_messages,
         ]
-        kwargs = {"reasoning": {"effort": "medium"}, "max_output_tokens": 10000, "prompt_cache_retention": "24h", "prompt_cache_key": prompt_cache_key}
+        kwargs = {"reasoning": {"effort": "high"}, "max_output_tokens": 20000, "prompt_cache_retention": "24h", "prompt_cache_key": prompt_cache_key}
 
     elif m in CHAT_MODELS:
         input_msgs = [
