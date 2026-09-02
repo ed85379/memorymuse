@@ -631,7 +631,6 @@ def search_indexed_memory(
             range_filter["range"]["gte"] = start_time
         if end_time is not None:
             range_filter["range"]["lte"] = end_time
-
         query_filter["must"].append(range_filter)
 
     if projects_in_focus:
@@ -829,8 +828,6 @@ def search_memory_semantic(query, project_ids=None, start_time=None, end_time=No
         if not value:
             return None
 
-        value = value.rstrip("Z")
-
         if len(value) == 10:
             # Date-only input: expand to local day boundary.
             local_date = datetime.strptime(value, "%Y-%m-%d").date()
@@ -840,8 +837,13 @@ def search_memory_semantic(query, project_ids=None, start_time=None, end_time=No
                 tzinfo=user_tz,
             )
         else:
-            # Full local datetime input.
-            local_dt = datetime.strptime(value, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=user_tz)
+            # Accept ISO datetimes with an explicit UTC offset, or treat
+            # timezone-less datetimes as being in the User's local timezone.
+            normalized_value = value[:-1] + "+00:00" if value.endswith("Z") else value
+            local_dt = datetime.fromisoformat(normalized_value)
+
+            if local_dt.tzinfo is None:
+                local_dt = local_dt.replace(tzinfo=user_tz)
 
         utc_dt = local_dt.astimezone(ZoneInfo("UTC"))
         return utc_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
