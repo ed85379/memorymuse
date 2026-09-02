@@ -7,6 +7,7 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import MessageActions from "./MessageActions";
 import TTSController from "./TTSController";
 import { BookMarked, EyeOff, MessageCircleHeart, MessageCircleOff } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 const formatTimestamp = (utcString) => {
   if (!utcString) return "";
@@ -386,8 +387,10 @@ const MessageItem = React.memo(
       handleLeaveThread,
       clearSelectionAndExit,
     } = props;
-  if (!msg) return <div>[No message]</div>;
 
+  const [showRaw, setShowRaw] = React.useState(false);
+
+  if (!msg) return <div>[No message]</div>;
 
   const rawText = msg.message || msg.text || "";
   const blocks = splitCustomBlocks(rawText);
@@ -446,11 +449,46 @@ const MessageItem = React.memo(
       }`}
     >
       <div className={`${bubbleWidth} ${rightAlign ? "ml-auto" : ""}`}>
-        <div className="text-xs text-neutral-400">{displayName}</div>
-        <div className="text-xs text-neutral-500">
-          {formatTimestamp(msg.timestamp)}
-        </div>
+        <div className="mb-1 flex w-full items-center justify-between">
+          <div>
+            <div className="text-xs text-neutral-400">{displayName}</div>
+            <div className="text-xs text-neutral-500">
+              {formatTimestamp(msg.timestamp)}
+            </div>
+          </div>
 
+          <div className="flex items-center gap-1.5 text-xs select-none">
+            <span
+              className={
+                showRaw
+                  ? "text-purple-300"
+                  : "text-neutral-500"
+              }
+            >
+              Raw Text
+            </span>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowRaw((current) => !current);
+              }}
+              className={`relative inline-flex h-4 w-8 shrink-0 rounded-full transition-colors duration-200
+                ${showRaw ? "bg-purple-600" : "bg-neutral-700"}
+                hover:${showRaw ? "bg-purple-500" : "bg-neutral-600"}
+                focus:outline-none focus:ring-2 focus:ring-purple-500/60 focus:ring-offset-1 focus:ring-offset-black`}
+              aria-pressed={showRaw}
+              aria-label={showRaw ? "Show formatted message" : "Show raw message text"}
+              title={showRaw ? "Show formatted message" : "Show raw message text"}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform duration-200
+                  ${showRaw ? "translate-x-4" : "translate-x-0"}`}
+              />
+            </button>
+          </div>
+        </div>
         <div
           className={`relative group text-sm px-3 py-2 rounded-lg whitespace-pre-wrap ${bubbleClass}
             ${
@@ -463,7 +501,12 @@ const MessageItem = React.memo(
         >
           {/* NEW: markdown renderer instead of dangerouslySetInnerHTML */}
           <div className="max-w-none text-sm leading-snug pt-4 pb-6">
-            {blocks.map((block, idx) => {
+            {showRaw ? (
+              <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded bg-black/30 p-3 font-mono text-xs leading-relaxed text-purple-100">
+                {rawText}
+              </pre>
+            ) : (
+              blocks.map((block, idx) => {
               if (block.type === "markdown") {
                 return (
                   <ReactMarkdown
@@ -656,7 +699,7 @@ const MessageItem = React.memo(
               }
 
               return null;
-            })}
+            }))}
 
             <GameTurnOutput turnActions={msg.metadata?.turn_actions} />
 
