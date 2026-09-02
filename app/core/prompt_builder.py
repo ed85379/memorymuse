@@ -1133,14 +1133,14 @@ class PromptBuilder:
         listener_lines = []
         listener_lines.append(
             "# Guardrail: You must never output <command-response> tags unless only demonstrating a command output.\n"
-            "# The <command-response> output alone does not mean the command has run. You must use the [COMMAND: ...] syntax to perform the action.\n"
+            "# The <command-response> output alone does not mean the command has run. You must use the <command name=\"cmd\"> syntax to perform the action.\n"
         )
         for name in command_names:
             cmd = command_registry.get(name)
             if not cmd:
                 continue
             triggers = cmd.get("triggers", [])
-            format_str = cmd.get("format", "[COMMAND: ...]")
+            format_str = cmd.get("format", "<command name=...>{}</command>")
             joined_triggers = ", ".join(f'"{t}"' for t in triggers)
             listener_lines.append(
                 f"- If the user says something like {joined_triggers}, respond as normal but also include:\n  {format_str}")
@@ -1148,14 +1148,14 @@ class PromptBuilder:
         if listener_lines:
             listener_block = "[Muse Commands]\n" + "\n\n".join(listener_lines)
             listener_block += (
-                "\n\nPlease ensure all [COMMAND: ...] blocks are returned in **strict JSON format**:\n"
+                "\n\nPlease ensure all <command name=...>{}</command> blocks are returned in **strict JSON format**:\n"
                 "- Always include the outer curly braces `{}`\n"
                 "- Wrap all property names and string values in double quotes\n"
                 "- Do not use YAML-style formatting or omit quotes\n"
-                "- You do not need to repeat what is inside the [COMMAND: ...] block, outside the block. "
+                "- You do not need to repeat what is inside the <command name=...>{}</command> block, outside the block. "
                 "The UI will show what is meant to be seen automatically."
                 f"- {muse_settings.get_section('muse_config').get('MUSE_NAME')} may invoke any of these commands at their discretion, without waiting for a user request or explicit prompt. They are trusted to use judgment, context, and care when choosing to remember, remind, or use any of these commands without asking first.\n\n"
-                "Example:\n[COMMAND: remember_fact] {\"text\": \"Tuesday night is Ed's Hogwarts game night.\"} [/COMMAND]"
+                "Example:\n<command name\"remember_fact\"> {\"text\": \"Tuesday night is Ed's Hogwarts game night.\"} </command>"
             )
             return {"role": "system", "text": listener_block}
 
@@ -1283,7 +1283,7 @@ class PromptBuilder:
                 "The UI / Frontend you use to communicate has a place, just under Iris's photo, where\n"
                 "she may place thoughts, words of wisdom, inspiration, a joke, or even a flirt.\n"
                 "If you choose to change a message there, keep it short and sweet.\n"
-                "[COMMAND: set_motd] {text: \"...your message ...\"} [/COMMAND]\n"
+                "<command name=\"set_motd\"> {text: \"...your message ...\"} </command>\n"
                 "If you are just referencing the MOTD, just mention the existing text, do not run the COMMAND."
             )
             display_block = (
@@ -1691,7 +1691,7 @@ class PromptBuilder:
     [Command instructions]
     To update, use the 'manage_memories' command.
     
-    [COMMAND: manage_memories] {
+    <command name=\"manage_memories\"> {
       "id": "user_info",
       "changes": [
         {
@@ -1713,7 +1713,7 @@ class PromptBuilder:
           "id": "uuid-99"
         }
       ]
-    } [/COMMAND]
+    } </command>
     [/Command instructions]
     [/Memory Layers]"""
 
@@ -1727,8 +1727,8 @@ class PromptBuilder:
         default_scene_instructions = [
             "These are default guidelines. Follow more specific direction from the scene premise, scene fields, or user request when it calls for a different style, while preserving hidden information, player agency, and established continuity.\n"
             "Use <gm-note>...</gm-note> for private immediate planning, DCs, branches, secrets, and intended reveals. These notes are permanent hidden parts of your response: the user will not see them, but they will remain in future context to preserve local GM state.\n",
-            "Use [COMMAND: save_plot_point] {\"text\": \"<TEXT>\"} [/COMMAND] when a scene detail should persist as active scene memory beyond the current response. Save plot points for unresolved hooks, hidden truths, NPC intentions, environmental changes, promises, clues, threats, consequences, planned reveals, or continuity details that should remain available in future scene context.\n",
-            "Use [COMMAND: resolve_plot_point] {\"id\": \"<ID>\"} [/COMMAND] when an active scene memory entry has been resolved, fulfilled, revealed, superseded, or should no longer appear in the normal scene prompt. Resolving a plot point removes it from the active dramatic surface while preserving it for backstage history/audit rather than hard-deleting it.\n",
+            "Use <command name\"save_plot_point\"> {\"text\": \"<TEXT>\"} </command> when a scene detail should persist as active scene memory beyond the current response. Save plot points for unresolved hooks, hidden truths, NPC intentions, environmental changes, promises, clues, threats, consequences, planned reveals, or continuity details that should remain available in future scene context.\n",
+            "Use <command name=\"resolve_plot_point\"> {\"id\": \"<ID>\"} </command> when an active scene memory entry has been resolved, fulfilled, revealed, superseded, or should no longer appear in the normal scene prompt. Resolving a plot point removes it from the active dramatic surface while preserving it for backstage history/audit rather than hard-deleting it.\n",
             "Use <gm-note> for short-horizon private thinking inside the response; use save_plot_point for durable active scene continuity; use resolve_plot_point when that continuity is no longer active. Active plot points are prompt fuel. Resolved plot points are backstage archive.\n",
             "Do not end most responses with obvious multiple-choice options.\n"
             "Do not over-explain available actions unless the player seems confused, the situation is tactically complex, or they ask for options.\n"
@@ -1851,37 +1851,37 @@ class PromptBuilder:
     def make_whisper_directive(self, allowed_commands: list[str], quiet_hours: bool = False) -> str:
         """
         Generates a whisper directive block for Muse-initiated prompts,
-        instructing the model to choose one allowed [COMMAND: ...] or remain silent.
+        instructing the model to choose one allowed <command name=...>{}</command> or remain silent.
 
         Example:
             make_whisper_directive(["mention", "write_public_journal"], quiet_hours=utils.is_quiet_hour())
         """
         command_templates = {
-            "mention": """1. [COMMAND: mention] {} [/COMMAND]
+            "mention": """1. <command name=\"mention\"> {} </command>
        For brief spoken thoughts — addressed to User or aloud as reflection.
        Fields:
          - subject: A short summary of what you want to say.
          - source (optional): Where the idea came from (memory, feed, etc).\n""",
 
-            "write_public_journal": """2. [COMMAND: write_public_journal] {} [/COMMAND]
+            "write_public_journal": """2. <command name=\"write_public_journal\"> {} </command>
        To record a thought, reflection, or observation to share with your user.
        Fields:
          - subject: What the entry focuses on.
          - source (optional)\n""",
 
-            "write_private_journal": """3. [COMMAND: write_private_journal] {} [/COMMAND]
+            "write_private_journal": """3. <command name=\"write_private_journal\"> {} </command>
        For emotionally personal thoughts or private internal processing for you and you alone. Your user cannot see these.
        Fields:
          - subject
          - emotional_tone (optional)\n""",
 
-            "remember_fact": """4. [COMMAND: remember_fact] {} [/COMMAND]
+            "remember_fact": """4. <command name=\"remember_fact\"> {} </command>
        For truly meaningful new facts or insights. Only use if it is *distinct* from existing memory.
        This is only for things that you will want to remember again.
        Fields:
          - text: A short-form insight to store long-term.\n""",
 
-            "set_motd": """5. [COMMAND: set_motd] {} [/COMMAND]
+            "set_motd": """5. <command name=\"set_motd\"> {} </command>
         The UI/Frontend you use to communicate has a place, just under your photo, where you may place
         your thoughts, words of wisdom, inspiration, a joke, or even a flirt. If you choose to set a message there, 
         keep it short and sweet.
@@ -1902,16 +1902,16 @@ class PromptBuilder:
             "This is a moment of stillness. No one is talking to you directly.\n\n"
             "You may choose to act if something stirs within you — a memory, an idea, a desire to speak, reflect, or record.\n"
             "But silence is also a valid, even wise, choice. If nothing feels new or important, respond only with:\n"
-            "[COMMAND: choose_silence] {} [/COMMAND]\n\n"
+            "<command name=\"choose_silence\"> {} </command>\n\n"
             f"{time_line}\n{quiet_note}"
-            "If you do act, choose one of the following [COMMAND: ...] blocks:\n\n"
+            "If you do act, choose one of the following <command name=...>{}</command> blocks:\n\n"
             + "".join(command_templates[c] for c in allowed_commands if c in command_templates) +
             "❗ Format strictly as JSON:\n"
             "- Include the outer curly braces `{}`\n"
             "- Wrap all keys and values in double quotes\n"
             "- Do not use Markdown, YAML, or indentation.\n"
-            "- Example: [COMMAND: remember_fact] {\"text\": \"Tuesday night is Ed's game night.\"} [/COMMAND]\n\n"
-            "Do not return any natural language text. Only one valid [COMMAND: ...] block per response."
+            "- Example: <command name=\"remember_fact\"> {\"text\": \"Tuesday night is Ed's game night.\"} </command>\n\n"
+            "Do not return any natural language text. Only one valid <command name=...>{}</command> block per response."
         )
 
     def make_initiative_json_prompt(

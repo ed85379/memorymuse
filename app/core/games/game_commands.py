@@ -10,10 +10,10 @@ COMMANDS = {
     "take_game_turn": {
         "triggers": [],
         "format": (
-            '[COMMAND: take_game_turn] '
+            '<command name="take_game_turn"> '
             '{"move": "<exact move from Legal moves>", '
             '"muse_plan": "<new, revised, reaffirmed plan, or null>"} '
-            '[/COMMAND]'
+            '</command>'
         ),
         "handler": lambda payload, **kwargs: take_game_turn_command_handler(
             payload,

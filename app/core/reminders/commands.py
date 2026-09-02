@@ -18,7 +18,7 @@ COMMANDS = {
     "set_reminder": {
         "triggers": ["remind me to", "set a reminder", "remind me that", "set an alarm", "set a schedule"],
         "format": (
-            "[COMMAND: set_reminder] {\"text\": \"<meaningful description of the reminder>\", \"schedule\": {\"minute\":0-59, \"hour\":0-23, \"day\":1-31, \"dow\":0-6, \"month\":1-12, \"year\":YYYY}, \"ends_on\": \"<ISO 8601 datetime, optional>\", \"notification_offset\": \"<duration before trigger, e.g. '10m' or '2h', optional>\", \"early_only\": <Boolean - optional>} [/COMMAND]\n\n"
+            "<command name=\"set_reminder\"> {\"text\": \"<meaningful description of the reminder>\", \"schedule\": {\"minute\":0-59, \"hour\":0-23, \"day\":1-31, \"dow\":0-6, \"month\":1-12, \"year\":YYYY}, \"ends_on\": \"<ISO 8601 datetime, optional>\", \"notification_offset\": \"<duration before trigger, e.g. '10m' or '2h', optional>\", \"early_only\": <Boolean - optional>} </command>\n\n"
             "Notes:\n"
             "  - `text`: Clear description of what the reminder is for (e.g. 'take vitamins').\n"
             "  - `schedule`: Parsed cron-like structure, with each field as an integer or wildcard '*'.\n"
@@ -48,7 +48,7 @@ COMMANDS = {
     "edit_reminder": {
         "triggers": ["update reminder", "change reminder", "fix schedule"],
         "format": (
-            "[COMMAND: edit_reminder] {\"id\": <entry_id>, \"text\": \"<meaningful description of the reminder>\", \"schedule\": {\"minute\":0-59, \"hour\":0-23, \"day\":1-31, \"dow\":0-6, \"month\":1-12, \"year\":YYYY}, \"ends_on\": \"<ISO 8601 datetime, optional>\", \"notification_offset\": \"<duration before trigger, e.g. '10m' or '2h', optional>\", \"early_only\": <Boolean - optional>} [/COMMAND]\n\n"
+            "<command name=\"edit_reminder\"> {\"id\": <entry_id>, \"text\": \"<meaningful description of the reminder>\", \"schedule\": {\"minute\":0-59, \"hour\":0-23, \"day\":1-31, \"dow\":0-6, \"month\":1-12, \"year\":YYYY}, \"ends_on\": \"<ISO 8601 datetime, optional>\", \"notification_offset\": \"<duration before trigger, e.g. '10m' or '2h', optional>\", \"early_only\": <Boolean - optional>} </command>\n\n"
             "  Notes:\n"
             "  - `id`: To edit an existing reminder, use the entry_id from the reminder shown above.\n"
             "  The following are all optional for edits. You only need to enter what needs to be changed:\n"
@@ -80,7 +80,7 @@ COMMANDS = {
     "snooze_reminder": {
         "triggers": ["snooze reminder", "remind me again in", "let me know again in"],
         "format": (
-            "[COMMAND: snooze_reminder] {\"id\": <entry_id>, \"snooze_until\": \"<ISO 8601 datetime>\"} [/COMMAND]\n\n"
+            "<command name\"snooze_reminder\"> {\"id\": <entry_id>, \"snooze_until\": \"<ISO 8601 datetime>\"} </command>\n\n"
             "  Notes:\n"
             "  - `id`: To edit an existing reminder, use the entry_id from the reminder shown above.\n"
             "  - `snooze_until`: Date/time in ISO 8601 format in user's timezone. The reminder will fire again at this time.\n"
@@ -103,7 +103,7 @@ COMMANDS = {
     "skip_reminder": {
         "triggers": ["skip reminder", "disable reminder until", "pause reminder"],
         "format": (
-            "[COMMAND: skip_reminder] {\"id\": <entry_id>, \"skip_until\": \"<ISO 8601 datetime>\"} [/COMMAND]\n\n"
+            "<command name=\"skip_reminder\"> {\"id\": <entry_id>, \"skip_until\": \"<ISO 8601 datetime>\"} </command>\n\n"
             "  Notes:\n"
             "  - `id`: To edit an existing reminder, use the entry_id from the reminder shown above.\n"
             "  - `skip_until`: Date/time in ISO 8601 format in user's timezone. The reminder won't fire again until after this time.\n"
@@ -126,7 +126,7 @@ COMMANDS = {
     "toggle_reminder": {
         "triggers": ["cancel reminder", "disable reminder", "don't notify again"],
         "format": (
-            "[COMMAND: toggle_reminder] {\"id\": <entry_id>, \"status\": \"enabled/disabled\"} [/COMMAND]\n\n"
+            "<command name=\"toggle_reminder\"> {\"id\": <entry_id>, \"status\": \"enabled/disabled\"} </command>\n\n"
             "  Notes:\n"
             "  - `id`: To edit an existing reminder, use the entry_id from the reminder shown above.\n"
             "  - `status`: Set to either 'enabled' or 'disabled'. Disabling the reminder will prevent all future notifications.\n"
@@ -148,7 +148,7 @@ COMMANDS = {
     },
     "send_reminders": {
         "triggers": [],
-        "format": "[COMMAND: send_reminders] {\"text\": \"message to send\", \"to\": \"webui\"} [/COMMAND]",
+        "format": "<command name=\"send_reminders\"> {\"text\": \"message to send\", \"to\": \"webui\"} </command>",
         "handler": lambda payload, **kwargs: asyncio.create_task(handle_send_reminders(payload, **kwargs))
     },
     "search_reminders": {
@@ -163,7 +163,7 @@ COMMANDS = {
             "# Instruction:\n"
             "# When you run the command, the user will see a list clearly formatted with IDs and text.\n"
             "# You should then ask the user which one they meant before proceeding with the next command.\n\n"
-            "[COMMAND: search_reminders] {"
+            "<command name=\"search_reminders\"> {"
             "\"query\": {"
             "\"text\": \"<string or partial match on reminder text — You may also include semantically similar or related words to improve matching>\", "
             "\"schedule\": {\"minute\": \"*\", \"hour\": \"*\", \"day\": \"*\", \"dow\": \"*\", \"month\": \"*\", \"year\": \"*\"}, "
@@ -172,7 +172,7 @@ COMMANDS = {
             "\"expired\": <boolean>"
             "}, "
             "\"limit\": <integer, optional>"
-            "} [/COMMAND]"
+            "} </command>"
         ),
         "handler": lambda payload, **kwargs: handle_search_reminders(payload),
         "filter": lambda data: {

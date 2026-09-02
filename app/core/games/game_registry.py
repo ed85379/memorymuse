@@ -429,10 +429,10 @@ def render_chess_prompt_context(
                 "Do not leave a previous plan silently unchanged.",
                 "",
                 (
-                    'Emit: [COMMAND: take_game_turn] '
+                    'Emit: <command name="take_game_turn"> '
                     '{"move": "<exact UCI legal move>", '
                     '"muse_plan": "<replace, revise, or reaffirm your plan; or null>"} '
-                    '[/COMMAND]'
+                    '</command>'
                 ),
             ])
         else:

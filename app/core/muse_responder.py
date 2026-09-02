@@ -16,8 +16,13 @@ from app.core.commands.registry import command_registry
 
 
 
-CMD_OPEN = re.compile(r"\[COMMAND:\s*([^\]]+)\]\s*", re.DOTALL)
-CMD_CLOSE = "[/COMMAND]"
+#CMD_OPEN = re.compile(r"\[COMMAND:\s*([^\]]+)\]\s*", re.DOTALL)
+#CMD_CLOSE = "[/COMMAND]"
+CMD_OPEN = re.compile(
+    r'<command\b[^>]*\bname\s*=\s*(?:"([^"]+)"|\'([^\']+)\')[^>]*>',
+    re.IGNORECASE,
+)
+CMD_CLOSE = re.compile(r'</command\s*>', re.IGNORECASE)
 
 @dataclass
 class CommandResult:
@@ -119,7 +124,7 @@ def process_commands_in_response(
     """
     Unified command-processing core.
 
-    - Parses all [COMMAND: ...] blocks from `response`
+    - Parses all <command name="cmd">{}</command> blocks from `response`
     - Executes handlers from command_registry command definitions
     - Optionally applies command_def["filter"] to handler results
     - Returns:
@@ -532,7 +537,7 @@ def _in_fence(pos: int, spans: list[tuple[int, int]]) -> bool:
 def extract_commands(text: str) -> Iterator[CommandMatch]:
     """
     Yields all command blocks in order. Each block:
-      - [COMMAND: name] { ...balanced JSON... } [/COMMAND]?   (closing optional)
+      - <command name="name"> { ...balanced JSON... } </command>
     Multiple commands per response are handled safely.
     """
     fence_spans = _find_fence_spans(text)
@@ -546,42 +551,39 @@ def extract_commands(text: str) -> Iterator[CommandMatch]:
         if not m:
             break
 
-        # If the [COMMAND: ...] header is inside a fenced block, skip it entirely
         if is_in_fence(m.start()):
             i = m.end()
             continue
 
-        name = m.group(1).strip()
+        name = (m.group(1) or m.group(2)).strip()
         pos = m.end()
 
         lbrace = text.find("{", pos)
         if lbrace == -1 or is_in_fence(lbrace):
-            # No JSON payload after header, or JSON starts in a fence — skip
             i = pos
             continue
 
         rbr_end = _balanced_object_end(text, lbrace)
         if rbr_end is None or is_in_fence(rbr_end - 1):
-            # Unbalanced JSON, or closing brace in a fence — skip
             i = pos
             continue
 
-        json_text = text[lbrace:rbr_end]
-
-        # Optional closing tag
         k = rbr_end
         while k < n and text[k].isspace():
             k += 1
-        had_close = text.startswith(CMD_CLOSE, k) and not is_in_fence(k)
-        end = k + len(CMD_CLOSE) if had_close else rbr_end
+
+        close_match = CMD_CLOSE.match(text, k)
+        if not close_match or is_in_fence(k):
+            i = pos
+            continue
 
         yield CommandMatch(
             name=name,
-            json_text=json_text,
-            span=(m.start(), end),
-            had_close=had_close,
+            json_text=text[lbrace:rbr_end],
+            span=(m.start(), close_match.end()),
+            had_close=True,
         )
-        i = end
+        i = close_match.end()
 
 
 

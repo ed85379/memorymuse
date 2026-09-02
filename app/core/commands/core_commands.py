@@ -20,17 +20,17 @@ from app.core.journal_core import create_journal_entry
 COMMANDS = {
     "write_public_journal": {
         "triggers": ["public journal", "log this publicly", "write this down for others"],
-        "format": "[COMMAND: write_public_journal] {subject, emotional_tone, tags, source_article_url} [/COMMAND]",
+        "format": '<command name="write_public_journal"> {subject, emotional_tone, tags, source_article_url} </command>',
         "handler": lambda payload, **kwargs: asyncio.create_task(handle_journal_command(payload, entry_type="public", **kwargs))
     },
     "write_private_journal": {
         "triggers": ["write private journal"],
-        "format": "[COMMAND: write_private_journal] {subject, emotional_tone, tags, source_article_url} [/COMMAND]",
+        "format": '<command name="write_private_journal"> {subject, emotional_tone, tags, source_article_url} </command>',
         "handler": lambda payload, **kwargs: asyncio.create_task(handle_journal_command(payload, entry_type="private", **kwargs))
     },
     "set_motd": {
         "triggers": [],  # Intentionally blank — only invoked by the muse
-        "format": "[COMMAND: set_motd] {text: \"... your message here ...\"} [/COMMAND]",
+        "format": '<command name="set_motd"> {text: \"... your message here ...\"} </command>',
         "handler": lambda payload, **kwargs: handle_set_motd(payload, **kwargs),
         "filter": lambda result: {
             "visible": "",
@@ -46,22 +46,22 @@ COMMANDS = {
     },
     "mention": {
         "triggers": [],  # Intentionally blank — only by the muse
-        "format": "[COMMAND: mention] {subject} [/COMMAND]",
+        "format": '<command name="mention"> {subject} </command>',
         "handler": lambda payload, **kwargs: asyncio.create_task(handle_mention_command(payload, **kwargs))
     },
     "route_message": {
         "triggers": [],
-        "format": "[COMMAND: route_message] {\"text\": \"message to send\", \"to\": \"webui || discord\" } [/COMMAND]",
+        "format": '<command name="route_message"> {\"text\": \"message to send\", \"to\": \"webui || discord\" } </command>',
         "handler": lambda payload, **kwargs: asyncio.create_task(handle_route_message(payload, **kwargs))
     },
     "choose_silence": {
         "triggers": [],
-        "format": "[COMMAND: choose_silence] {} [/COMMAND]",
+        "format": '<command name="choose_silence"> {} </command>',
         "handler": lambda payload, **kwargs: ""  # No action, just logs
     },
     "remember_fact": {
         "triggers": ["remember that", "save this to memory", "record this"],
-        "format": "[COMMAND: remember_fact] {text} [/COMMAND]",
+        "format": '<command name="remember_fact"> {text} </command>',
         "handler": lambda payload, **kwargs: manager.add_entry("facts", {"text": payload.get("text")}),
         "filter": lambda entry: {
             "visible": f"{muse_settings.get_section('muse_config').get('MUSE_NAME')} has saved a fact: {entry.get('text')}",
@@ -70,7 +70,7 @@ COMMANDS = {
     },
     "save_project_fact": {
         "triggers": ["save project fact", "save this for the project", "record in project"],
-        "format": "[COMMAND: save_project_fact] {\"text\": \"<TEXT>\", \"project_id\": \"<project_id from Projects List>\"} [/COMMAND]",
+        "format": '<command name="save_project_fact"> {\"text\": \"<TEXT>\", \"project_id\": \"<project_id from Projects List>\"} </command>',
         "handler": lambda payload, **kwargs: save_project_fact_handler(payload, **kwargs),
         "filter": lambda entry: {
             "visible": f"{muse_settings.get_section('muse_config').get('MUSE_NAME')} has saved a project fact: {entry.get('text')} to {entry.get('doc_id')}",
@@ -87,7 +87,7 @@ COMMANDS = {
     },
     "save_plot_point": {
         "triggers": [],
-        "format": "[COMMAND: save_plot_point] {\"text\": \"<TEXT>\"} [/COMMAND]",
+        "format": '<command name="save_plot_point"> {\"text\": \"<TEXT>\"} </command>',
         "handler": lambda payload, **kwargs: save_scene_fact_handler(payload, **kwargs),
         "filter": lambda entry: {
             "visible": f"{muse_settings.get_section('muse_config').get('MUSE_NAME')} has saved a plot point.",
@@ -104,7 +104,7 @@ COMMANDS = {
     },
     "resolve_plot_point": {
         "triggers": [],
-        "format": "[COMMAND: resolve_plot_point] {\"id\": \"<ID>\"} [/COMMAND]",
+        "format": '<command name="resolve_plot_point"> {\"id\": \"<ID>\"} </command>',
         "handler": lambda payload, **kwargs: resolve_scene_fact_handler(payload, **kwargs),
         "filter": lambda entry: {
             "visible": f"{muse_settings.get_section('muse_config').get('MUSE_NAME')} has resolved a plot point.",
@@ -121,7 +121,7 @@ COMMANDS = {
     },
     "record_userinfo": {
         "triggers": ["something about me", "I really like", "I don’t like when", "my habit is", "I prefer"],
-        "format": "[COMMAND: record_userinfo] {text} [/COMMAND]",
+        "format": '<command name="record_userinfo"> {text} </command>',
         "handler": lambda payload, **kwargs: manager.add_entry("user_info", {"text": payload.get("text")}),
         "filter": lambda entry: {
             "visible": f"{muse_settings.get_section('muse_config').get('MUSE_NAME')} has learned something about you: {entry.get('text')}",
@@ -138,7 +138,7 @@ COMMANDS = {
     },
     "realize_insight": {
         "triggers": ["breakthrough", "becoming", "I noticed something", "you tend to", "It would be amazing if"],
-        "format": "[COMMAND: realize_insight] {text} [/COMMAND]",
+        "format": '<command name="realize_insight"> {text} </command>',
         "handler": lambda payload, **kwargs: manager.add_entry("insights", {"text": payload.get("text")}),
         "filter": lambda entry: {
             "visible": f"{muse_settings.get_section('muse_config').get('MUSE_NAME')} has realized something: {entry.get('text')}",
@@ -155,7 +155,7 @@ COMMANDS = {
     },
     "note_to_self": {
         "triggers": ["thinking aloud", "keep in mind", "note this", "I need to remember", "consider this"],
-        "format": "[COMMAND: note_to_self] {text} [/COMMAND]",
+        "format": '<command name="note_to_self"> {text} </command>',
         "handler": lambda payload, **kwargs: manager.add_entry("inner_monologue", {"text": payload.get("text")}),
         "filter": lambda entry: {
             "visible": f"{muse_settings.get_section('muse_config').get('MUSE_NAME')} has remembered something: {entry.get('text')}",
@@ -172,13 +172,13 @@ COMMANDS = {
     },
     "manage_memories": {
         "triggers": ["edit that memory", "edit this memory", "update that memory", "delete that memory", "forget that"],
-        "format": "[COMMAND: manage_memories] {id: <layer_id>, changes: [{type: add|edit|delete, ...}]} [/COMMAND]\n"
+        "format": '<command name="manage_memories"> {id: <layer_id>, changes: [{type: add|edit|delete, ...}]} </command>\n'
                 "# Add\n"
-                "[COMMAND: manage_memories] {\"id\": \"insights\", \"changes\": [{\"type\": \"add\", \"entry\": {\"text\": \"...\"}}]} [/COMMAND]\n"
+                '<command name="manage_memories"> {\"id\": \"insights\", \"changes\": [{\"type\": \"add\", \"entry\": {\"text\": \"...\"}}]} </command>\n'
                 "# Edit\n"
-                "[COMMAND: manage_memories] {\"id\": \"insights\", \"changes\": [{\"type\": \"edit\", \"id\": \"<entry_id>\", \"fields\": {\"text\": \"...\"}}]} [/COMMAND]\n"
+                '<command name="manage_memories"> {\"id\": \"insights\", \"changes\": [{\"type\": \"edit\", \"id\": \"<entry_id>\", \"fields\": {\"text\": \"...\"}}]} </command>\n'
                 "# Delete\n"
-                "[COMMAND: manage_memories] {\"id\": \"insights\", \"changes\": [{\"type\": \"delete\", \"id\": \"<entry_id>\"}]} [/COMMAND]",
+                '<command name="manage_memories"> {\"id\": \"insights\", \"changes\": [{\"type\": \"delete\", \"id\": \"<entry_id>\"}]} </command>',
         "handler": lambda payload, **kwargs: manage_memories_handler(payload),
         "filter": lambda results: {
             "visible": "\n".join([
@@ -537,3 +537,4 @@ def register_core_commands(registry):
     for name, handler in COMMANDS.items():
         print(f"Registering Core Command: {name}")
         registry.register(name, handler)
+        
