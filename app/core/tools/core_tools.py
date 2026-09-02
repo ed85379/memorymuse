@@ -118,7 +118,6 @@ def search_memory(
                 end_time=end_time,
                 limit=limit,
             )
-            print(f"SEMANTIC MEMORY SEARCH RESULTS:\n{_format_results(results)}\n")
 
             return {
                 "tool_output": _format_results(results),
