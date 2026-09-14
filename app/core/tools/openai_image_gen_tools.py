@@ -45,8 +45,8 @@ def get_openai_image_config() -> dict:
     image_config = muse_settings.get_section("openai_image_generation") or {}
 
     return {
-        "generate_model": image_config.get("OPENAI_GENERATE_IMAGE_MODEL", "gpt-image-2"),
-        "muse_model": image_config.get("OPENAI_MUSE_IMAGE_MODEL", "gpt-image-2"),
+        "generate_model": image_config.get("OPENAI_GENERATE_IMAGE_MODEL", "gpt-image-2.5-sunburst"),
+        "muse_model": image_config.get("OPENAI_MUSE_IMAGE_MODEL", "gpt-image-2.5-sunburst"),
         "default_image_size": image_config.get("OPENAI_IMAGE_SIZE", "auto"),
         "default_output_format": image_config.get("OPENAI_IMAGE_OUTPUT_FORMAT", "png"),
         "default_quality": image_config.get("OPENAI_IMAGE_QUALITY", "medium"),
