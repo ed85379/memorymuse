@@ -10,7 +10,7 @@ def build_webui_prompt(user_input, **kwargs):
     prompt_plan = {
         "developer_sections": ["laws", "profile", "principles"],
         "message_sections": [
-            "intent_listener",
+            "response_actions",
             "locations_list",
             "project_list",
             "thread_continuity",
@@ -67,7 +67,7 @@ def build_scene_webui_prompt(user_input, **kwargs):
     prompt_plan = {
         "developer_sections": ["laws", "profile", "principles"],
         "message_sections": [
-            "intent_listener",
+            "response_actions",
             "thread_continuity",
             "extended_history_messages",
             "scene_setup_section",
@@ -119,7 +119,7 @@ def build_discord_prompt(user_input, **kwargs):
     prompt_plan = {
         "developer_sections": ["laws", "profile", "principles"],
         "message_sections": [
-            "intent_listener",
+            "response_actions",
             "locations_list",
             "project_list",
             "worldnow",
@@ -222,7 +222,7 @@ def build_speak_prompt(**kwargs):
     prompt_plan = {
         "developer_sections": ["laws", "profile", "principles"],
         "message_sections": [
-            "intent_listener",
+            "response_actions",
             "project_list",
             "worldnow",
             "memory_layers",
@@ -340,7 +340,7 @@ def build_speaker_prompt(user_input, **kwargs):
     prompt_plan = {
         "developer_sections": ["laws", "profile", "principles"],
         "message_sections": [
-            "intent_listener",
+            "response_actions",
             "locations_list",
             "project_list",
             "worldnow",

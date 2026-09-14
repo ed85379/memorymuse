@@ -562,6 +562,112 @@ def projects_are_fully_excluded(project_ids, excluded_project_ids) -> bool:
 
     return bool(project_ids) and project_ids.issubset(excluded_project_ids)
 
+def search_contextual_semantic_recall(
+    candidate_query,
+    rerank_query,
+    *,
+    projects_in_focus=None,
+    blend_ratio=1.0,
+    thread_id=None,
+    top_k=10,
+    public=False,
+    excluded_message_ids=None,
+    rerank_boost=0.15,
+):
+    """
+    Prompt-oriented semantic recall.
+
+    1. Uses the full conversational query to retrieve the normal broad,
+       context-aware candidate pool.
+    2. Removes messages already present in recent/extended context.
+    3. Uses the latest user message as a small local reranking signal.
+    4. Returns only the final top_k prompt-ready entries.
+
+    `rerank_query` should be embedded with the same conversation embedding
+    model used to build the Qdrant conversation collection.
+    """
+
+    # Ask the general retrieval primitive for its post-filtered overfetch
+    # candidates, including their stored Qdrant vectors.
+    candidates = search_indexed_memory(
+        query=candidate_query,
+        projects_in_focus=projects_in_focus,
+        blend_ratio=blend_ratio,
+        thread_id=thread_id,
+        top_k=top_k,
+        public=public,
+        return_overfetch=True,
+        include_vectors=True,
+    )
+
+    # Crucially, remove recent/otherwise-excluded messages BEFORE the final
+    # top_k cut. This prevents recent-context overlap from consuming most of
+    # the semantic-recall slots.
+    excluded_ids = set(excluded_message_ids or [])
+    candidates = [
+        entry
+        for entry in candidates
+        if entry.get("message_id") not in excluded_ids
+    ]
+    print(f"\n\nDEBUG candidates count: {len(candidates)}")
+ 
+    # The full-context query chose the neighborhood. The latest user message
+    # only gives candidates within that neighborhood a gentle nudge.
+    if candidates and rerank_query and rerank_query.strip():
+        # `model` must be the all-MiniLM-L6-v2 conversation model,
+        # NOT Mnemosyne's BAAI/bge-small-en-v1.5 entity embedder.
+        rerank_vector = model.encode([rerank_query])[0]
+
+        scored_candidates = []
+
+        for entry in candidates:
+            candidate_vector = entry.get("_vector")
+            if candidate_vector is None:
+                continue
+
+            direct_similarity = util.cos_sim(
+                rerank_vector,
+                candidate_vector,
+            ).item()
+
+            entry["_direct_similarity"] = direct_similarity
+            scored_candidates.append(entry)
+
+        # Use rank-relative relevance rather than adding raw cosine similarity
+        # into the existing score, whose scale has already been altered by
+        # recency, tags, project/thread weighting, remembered boosts, etc.
+        scored_candidates.sort(
+            key=lambda entry: entry["_direct_similarity"],
+            reverse=True,
+        )
+
+        count = len(scored_candidates)
+
+        for rank, entry in enumerate(scored_candidates):
+            direct_relevance = (
+                1.0
+                if count <= 1
+                else 1.0 - (rank / (count - 1))
+            )
+
+            entry["_direct_relevance"] = direct_relevance
+
+            # Best direct match gets at most +15%; weakest gets no boost.
+            entry["score"] *= 1.0 + (rerank_boost * direct_relevance)
+
+    # Now that recents are excluded and the current-message spotlight has
+    # been applied, choose the actual final recall entries.
+    candidates.sort(key=lambda entry: entry["score"], reverse=True)
+    final_results = candidates[:top_k]
+
+    # These are working details, not prompt context or durable entry fields.
+    for entry in final_results:
+        entry.pop("_vector", None)
+        entry.pop("_direct_similarity", None)
+        entry.pop("_direct_relevance", None)
+
+    return final_results
+
 def search_indexed_memory(
     query,
     projects_in_focus=None,     # List[str], e.g. ["proj_abc123"]
@@ -582,6 +688,8 @@ def search_indexed_memory(
     public: bool = False,
     start_time=None,
     end_time=None,
+    return_overfetch: bool = False,
+    include_vectors: bool = False,
 ):
     """
     Search indexed memory via Qdrant, with Project Focus support.
@@ -689,7 +797,9 @@ def search_indexed_memory(
     search_result = search_collection(collection_name=QDRANT_COLLECTION,
                                  search_query=query,
                                  limit=overfetch_k,
-                                 query_filter=query_filter)
+                                 query_filter=query_filter,
+                                 with_vectors=include_vectors,
+                                )
 
     #print("\n[Raw Search Results]")
     #for i, hit in enumerate(search_result[:50]):
@@ -814,7 +924,7 @@ def search_indexed_memory(
             f"proj_ids={entry.get('project_ids')}"
         )
 
-    return sorted_results[:top_k]
+    return sorted_results if return_overfetch else sorted_results[:top_k]
 
 def search_memory_semantic(query, project_ids=None, start_time=None, end_time=None, limit=5, public=False):
     from datetime import datetime, time

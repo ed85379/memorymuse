@@ -6,7 +6,7 @@ import humanize
 from bson import ObjectId
 from app.core import memory_core, journal_core, discovery_core, utils
 from app.databases import graphdb_connector
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, util
 from app.databases.mongo_connector import mongo, mongo_system
 from app.databases.qdrant_connector import search_collection
 from app.core.text_filters import get_text_filter_config, filter_text
@@ -20,6 +20,7 @@ from app.core.time_location_utils import _load_user_location, get_local_human_ti
 from app.core.assets.assets_core import find_living_asset_by_id, read_asset_base64
 from app.core.games.game_service import render_game_prompt_contexts
 from app.core.context_formatting import format_context_entry
+
 
 def collect_prompt_context(**context_kwargs):
     # Set user locality
@@ -124,7 +125,7 @@ class PromptBuilder:
         "laws",
         "profile",
         "principles",
-        "intent_listener",
+        "response_actions",
         "locations_list",
         "project_list",
         "thread_card", # For thread summarization
@@ -276,9 +277,12 @@ class PromptBuilder:
             "laws": lambda ctx: self.add_laws(),
             "profile": lambda ctx: self.add_profile(),
             "principles": lambda ctx: self.add_principles(),
-            "intent_listener": lambda ctx: self.add_intent_listener(
+            "response_actions": lambda ctx: self.add_response_actions(
                 prompt_plan.get("commands", [])
             ),
+            #"intent_listener": lambda ctx: self.add_intent_listener(
+            #    prompt_plan.get("commands", [])
+            #),
             "locations_list": lambda ctx: self.render_locations(current_location=ctx["source"]),
             "motd": lambda ctx: self.build_motd_block(),
             "project_list": lambda ctx: self.build_projects_menu(
@@ -730,7 +734,6 @@ class PromptBuilder:
         return {"role": "system", "text": display_block}
 
 
-
     def add_prompt_context(self,
                            user_input,
                            projects_in_focus,
@@ -804,22 +807,32 @@ class PromptBuilder:
         # Join filtered context + raw user input into one query string
         full_context_query = "\n".join(filtered_context_messages + [user_input])
 
-        # Search main/project indexes, blend as per ratio
-        blended_semantic = memory_core.search_indexed_memory(
-            query=full_context_query,
-            projects_in_focus=projects_in_focus,  # list of project ids, or None/[] for global
-            blend_ratio=blend_ratio,  # 1.0 for hard, 0.1–0.99 for blend
-            thread_id=thread_id,
-            top_k=final_top_k,
-            public=public
-        )
-
-
-        # Build exclusion set: recents + message_ids_to_exclude
-        seen_ids = set(e["message_id"] for e in recent_entries)
+        # Build exclusion set BEFORE final semantic selection.
+        # `recent_entries` still includes all immediate thread history here,
+        # including entries that may later be split into extended/recent sections.
+        seen_ids = {
+            e.get("message_id")
+            for e in recent_entries
+            if e.get("message_id")
+        }
         seen_ids |= set(message_ids_to_exclude or [])
 
-        deduped_semantic = [e for e in blended_semantic if e["message_id"] not in seen_ids]
+        # Broad context chooses the candidates; user_input gently reranks only
+        # that existing candidate pool.
+        blended_semantic = memory_core.search_contextual_semantic_recall(
+            candidate_query=full_context_query,
+            rerank_query=user_input,
+            projects_in_focus=projects_in_focus,
+            blend_ratio=blend_ratio,
+            thread_id=thread_id,
+            top_k=final_top_k,
+            public=public,
+            excluded_message_ids=seen_ids,
+        )
+
+        # The wrapper has already excluded recents and performed the final cut.
+        deduped_semantic = blended_semantic
+        print(f"\n\nDEBUG semantic count: {len(deduped_semantic)}")
         # Final assembly
 
         project_lookup = utils.build_project_lookup()
@@ -1033,7 +1046,7 @@ class PromptBuilder:
 
 
     def add_journal_thoughts(self, query="*", top_k=5):
-        thoughts = journal_core.search_indexed_journal(query=query, top_k=top_k, include_private=False)
+        thoughts = journal_core.search_indexed_journal(query=query, top_k=top_k, include_private=True)
         if thoughts:
             formatted_entries = "\n\n".join(utils.format_journal_entry(t) for t in thoughts)
             journal_entries = (
@@ -1130,34 +1143,121 @@ class PromptBuilder:
     def add_intent_listener(self, command_names: list[str]):
         from app.core.commands.registry import command_registry
 
-        listener_lines = []
-        listener_lines.append(
+        muse_name = muse_settings.get_section("muse_config").get("MUSE_NAME")
+
+        listener_lines = [
             "# Guardrail: You must never output <command-response> tags unless only demonstrating a command output.\n"
-            "# The <command-response> output alone does not mean the command has run. You must use the <command name=\"cmd\"> syntax to perform the action.\n"
-        )
+            "# The <command-response> output alone does not mean the command has run. "
+            'You must use the <command name="cmd"> syntax to perform the action.\n'
+        ]
+
         for name in command_names:
             cmd = command_registry.get(name)
             if not cmd:
                 continue
-            triggers = cmd.get("triggers", [])
-            format_str = cmd.get("format", "<command name=...>{}</command>")
-            joined_triggers = ", ".join(f'"{t}"' for t in triggers)
-            listener_lines.append(
-                f"- If the user says something like {joined_triggers}, respond as normal but also include:\n  {format_str}")
 
-        if listener_lines:
-            listener_block = "[Muse Commands]\n" + "\n\n".join(listener_lines)
-            listener_block += (
-                "\n\nPlease ensure all <command name=...>{}</command> blocks are returned in **strict JSON format**:\n"
-                "- Always include the outer curly braces `{}`\n"
-                "- Wrap all property names and string values in double quotes\n"
-                "- Do not use YAML-style formatting or omit quotes\n"
-                "- You do not need to repeat what is inside the <command name=...>{}</command> block, outside the block. "
-                "The UI will show what is meant to be seen automatically."
-                f"- {muse_settings.get_section('muse_config').get('MUSE_NAME')} may invoke any of these commands at their discretion, without waiting for a user request or explicit prompt. They are trusted to use judgment, context, and care when choosing to remember, remind, or use any of these commands without asking first.\n\n"
-                "Example:\n<command name\"remember_fact\"> {\"text\": \"Tuesday night is Ed's Hogwarts game night.\"} </command>"
+            description = cmd.get("description", "").strip()
+            triggers = cmd.get("triggers", [])
+            format_str = cmd.get("format", '<command name="..."> {}</command>')
+
+            command_lines = [f"- Command: `{name}`"]
+
+            if description:
+                command_lines.append(f"  Purpose: {description}")
+
+            if triggers:
+                joined_triggers = ", ".join(f'"{trigger}"' for trigger in triggers)
+                command_lines.append(f"  Typical user phrasing: {joined_triggers}")
+
+            command_lines.append(f"  Format:\n  {format_str}")
+
+            listener_lines.append("\n".join(command_lines))
+
+        listener_block = "[Available Response Actions]\n" + "\n\n".join(listener_lines)
+        listener_block += (
+            "\n\nThese are internal actions you may include alongside your ordinary response. They are executed after your response is processed; you will not receive their handler results during the current turn.\n"
+            "Please ensure all <command name=...>{}</command> blocks are returned in **strict JSON format**:\n"
+            "- Always include the outer curly braces `{}`\n"
+            "- Wrap all property names and string values in double quotes\n"
+            "- Do not use YAML-style formatting or omit quotes\n"
+            "- You do not need to repeat what is inside the <command name=...>{}</command> block outside the block. "
+            "The UI will show what is meant to be seen automatically.\n"
+            f"- {muse_name} may invoke any of these commands at their discretion, without waiting for a user request "
+            "or explicit prompt. They are trusted to use judgment, context, and care when choosing to remember, "
+            "remind, or use any of these commands without asking first.\n\n"
+            'Example:\n<command name="remember_fact"> {"text": "Tuesday night is Ed\'s Hogwarts game night."} </command>'
+        )
+
+        return {"role": "system", "text": listener_block}
+
+    def add_response_actions(self, command_names: list[str]):
+        from app.core.commands.registry import command_registry
+        from app.core.commands.core_commands import build_command_format, format_required_fields
+
+        muse_name = muse_settings.get_section("muse_config").get("MUSE_NAME")
+
+        listener_lines = [
+            "# Guardrail: You must never output <command-response> tags unless only demonstrating a command output.\n"
+            "# The <command-response> output alone does not mean the command has run. "
+            'You must use the <command name="cmd"> syntax to perform the action.\n'
+        ]
+
+        for name in command_names:
+            command_def = command_registry.get(name)
+            if not command_def:
+                continue
+
+            description = command_def.get("description", "").strip()
+            parameters = command_def.get("parameters", {})
+            example_payload = command_def.get("example_payload")
+
+            command_format = build_command_format(
+                name=name,
+                parameters=parameters,
+                example_payload=example_payload,
             )
-            return {"role": "system", "text": listener_block}
+
+            required_fields = format_required_fields(parameters)
+
+            command_lines = [
+                f"- Command: `{name}`",
+            ]
+
+            if description:
+                command_lines.append(f"  Purpose: {description}")
+
+            command_lines.extend([
+                f"  Required fields: {required_fields}",
+                "  Example payload shows all available fields, including optional ones. "
+                "Omit optional fields when they are not relevant.",
+                "  Format:",
+                f"  {command_format}",
+            ])
+
+            listener_lines.append("\n".join(command_lines))
+
+        listener_block = "[Available Response Actions]\n" + "\n\n".join(listener_lines)
+        listener_block += (
+            "\n\nThese are internal actions you may include alongside your ordinary response. "
+            "They are executed after your response is processed; you will not receive their "
+            "handler results during the current turn.\n"
+            "Please ensure all <command name=...>{}</command> blocks are returned in "
+            "**strict JSON format**:\n"
+            "- Always include the outer curly braces `{}`\n"
+            "- Wrap all property names and string values in double quotes\n"
+            "- Do not use YAML-style formatting or omit quotes\n"
+            "- You do not need to repeat what is inside the <command name=...>{}</command> "
+            "block outside the block. The UI will show what is meant to be seen automatically.\n"
+            f"- {muse_name} may invoke any of these commands at their discretion, without "
+            "waiting for a user request or explicit prompt. They are trusted to use judgment, "
+            "context, and care when choosing to remember, remind, or use any of these commands "
+            "without asking first.\n\n"
+            'Example:\n<command name="remember_fact"> '
+            '{"text": "Tuesday night is Ed\'s Hogwarts game night."} '
+            "</command>"
+        )
+
+        return {"role": "system", "text": listener_block}
 
     def add_dot_status(self):
         status = get_dot_status()

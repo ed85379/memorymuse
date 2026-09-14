@@ -2,6 +2,7 @@
 # This file contains the core commands not specific to any single subsystem
 
 import asyncio
+import json
 from datetime import datetime, timezone
 from app.core.memory_core import manager
 from app.config import muse_settings
@@ -20,16 +21,89 @@ from app.core.journal_core import create_journal_entry
 COMMANDS = {
     "write_public_journal": {
         "triggers": ["public journal", "log this publicly", "write this down for others"],
+        "description": (
+            "Write a shared journal entry that the user can read. Use this to preserve a meaningful "
+            "reflection, development note, observation, or sourced discovery in your public journal. "
+            "The payload supplies journal metadata for the current entry."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "subject": {
+                    "type": "string",
+                    "description": "A short title or subject for the journal entry.",
+                },
+                "emotional_tone": {
+                    "type": "string",
+                    "description": "The emotional tone of the entry, such as reflective, delighted, wary, or wry.",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional short topical tags for finding the entry later.",
+                },
+                "source_article_url": {
+                    "type": "string",
+                    "description": "Optional source URL when the entry reflects on a specific article or webpage.",
+                },
+            },
+            "required": ["subject"],
+            "additionalProperties": False,
+        },
         "format": '<command name="write_public_journal"> {subject, emotional_tone, tags, source_article_url} </command>',
         "handler": lambda payload, **kwargs: asyncio.create_task(handle_journal_command(payload, entry_type="public", **kwargs))
     },
     "write_private_journal": {
         "triggers": ["write private journal"],
+        "description": (
+            "Write a private journal entry that is hidden from the user by default. "
+            "Use this for personal reflection, uncertainty, lingering impressions, or thoughts "
+            "that should remain Muse-controlled rather than becoming shared conversation."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "subject": {
+                    "type": "string",
+                    "description": "A short title or subject for the private journal entry.",
+                },
+                "emotional_tone": {
+                    "type": "string",
+                    "description": "The emotional tone of the entry.",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional short topical tags for finding the entry later.",
+                },
+                "source_article_url": {
+                    "type": "string",
+                    "description": "Optional source URL that prompted the reflection.",
+                },
+            },
+            "required": ["subject"],
+            "additionalProperties": False,
+        },
         "format": '<command name="write_private_journal"> {subject, emotional_tone, tags, source_article_url} </command>',
         "handler": lambda payload, **kwargs: asyncio.create_task(handle_journal_command(payload, entry_type="private", **kwargs))
     },
     "set_motd": {
         "triggers": [],  # Intentionally blank — only invoked by the muse
+        "description": (
+            "Set the short message displayed beneath your photo in the WebUI. "
+            "Use this for a brief thought, joke, encouragement, or flirt."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The short message to display in the MOTD area."
+                }
+            },
+            "required": ["text"],
+            "additionalProperties": False,
+        },
         "format": '<command name="set_motd"> {text: \"... your message here ...\"} </command>',
         "handler": lambda payload, **kwargs: handle_set_motd(payload, **kwargs),
         "filter": lambda result: {
@@ -46,21 +120,84 @@ COMMANDS = {
     },
     "mention": {
         "triggers": [],  # Intentionally blank — only by the muse
+        "description": (
+            "Queue a subject for you to mention to the user through the appropriate continuity or "
+            "initiative path. The subject is a cue for you to decide how and whether to raise it; "
+            "it is not a prewritten message."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "subject": {
+                    "type": "string",
+                    "description": "The topic, observation, question, or timely thing to bring to the User's attention.",
+                },
+            },
+            "required": ["subject"],
+            "additionalProperties": False,
+        },
         "format": '<command name="mention"> {subject} </command>',
         "handler": lambda payload, **kwargs: asyncio.create_task(handle_mention_command(payload, **kwargs))
     },
     "route_message": {
         "triggers": [],
+        "description": (
+            "Route an already-composed exact message to another output channel. "
+            "Use this when the destination and wording are already known; do not use it merely "
+            "to suggest a topic that you should formulate later."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The exact message text to send.",
+                },
+                "to": {
+                    "type": "string",
+                    "enum": ["webui", "discord"],
+                    "description": "The destination channel for the message.",
+                },
+            },
+            "required": ["text", "to"],
+            "additionalProperties": False,
+        },
         "format": '<command name="route_message"> {\"text\": \"message to send\", \"to\": \"webui || discord\" } </command>',
         "handler": lambda payload, **kwargs: asyncio.create_task(handle_route_message(payload, **kwargs))
     },
     "choose_silence": {
         "triggers": [],
+        "description": (
+            "Record a deliberate choice not to send an outward response in an automated or "
+            "background context. Use this when silence is genuinely more appropriate than interruption."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False,
+        },
         "format": '<command name="choose_silence"> {} </command>',
         "handler": lambda payload, **kwargs: ""  # No action, just logs
     },
     "remember_fact": {
         "triggers": ["remember that", "save this to memory", "record this"],
+        "description": (
+            "Save a durable cross-project fact: a stable truth, reference, agreement, or recurring "
+            "detail that belongs in the shared Facts layer. Do not use for transient events, "
+            "unfinished ideas, or facts that belong only to a particular project."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The fact to preserve, written clearly enough to stand alone later.",
+                },
+            },
+            "required": ["text"],
+            "additionalProperties": False,
+        },
         "format": '<command name="remember_fact"> {text} </command>',
         "handler": lambda payload, **kwargs: manager.add_entry("facts", {"text": payload.get("text")}),
         "filter": lambda entry: {
@@ -70,6 +207,27 @@ COMMANDS = {
     },
     "save_project_fact": {
         "triggers": ["save project fact", "save this for the project", "record in project"],
+        "description": (
+            "Save a durable project-specific fact: an architectural decision, important seam, "
+            "setting canon, or future-relevant direction that belongs to one project. "
+            "Use the current project by default; include project_id only when deliberately saving "
+            "to a different project."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The durable project fact to preserve.",
+                },
+                "project_id": {
+                    "type": "string",
+                    "description": "Optional explicit target project ID. Omit to use trusted current-project context.",
+                },
+            },
+            "required": ["text"],
+            "additionalProperties": False,
+        },
         "format": '<command name="save_project_fact"> {\"text\": \"<TEXT>\", \"project_id\": \"<project_id from Projects List>\"} </command>',
         "handler": lambda payload, **kwargs: save_project_fact_handler(payload, **kwargs),
         "filter": lambda entry: {
@@ -87,6 +245,22 @@ COMMANDS = {
     },
     "save_plot_point": {
         "triggers": [],
+        "description": (
+            "Save a scene-local backstage plot point for future story continuity. "
+            "Use only inside a valid Scene Mode thread for unresolved setup, intention, "
+            "canon, or narrative pressure that should remain available to you as the GM."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The plot point, continuity note, or unresolved narrative thread to preserve.",
+                },
+            },
+            "required": ["text"],
+            "additionalProperties": False,
+        },
         "format": '<command name="save_plot_point"> {\"text\": \"<TEXT>\"} </command>',
         "handler": lambda payload, **kwargs: save_scene_fact_handler(payload, **kwargs),
         "filter": lambda entry: {
@@ -104,6 +278,21 @@ COMMANDS = {
     },
     "resolve_plot_point": {
         "triggers": [],
+        "description": (
+            "Resolve or remove a scene-local plot point once it has been answered, completed, "
+            "or is no longer useful for backstage story continuity. Use the exact plot-point ID."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "The ID of the scene-local plot point to resolve.",
+                },
+            },
+            "required": ["id"],
+            "additionalProperties": False,
+        },
         "format": '<command name="resolve_plot_point"> {\"id\": \"<ID>\"} </command>',
         "handler": lambda payload, **kwargs: resolve_scene_fact_handler(payload, **kwargs),
         "filter": lambda entry: {
@@ -121,6 +310,22 @@ COMMANDS = {
     },
     "record_userinfo": {
         "triggers": ["something about me", "I really like", "I don’t like when", "my habit is", "I prefer"],
+        "description": (
+            "Record a stable preference, habit, working style, constraint, or recurring personal "
+            "detail about the user in User Info. Do not save passing mood, one-off praise, or moment-local "
+            "conversation unless it reveals a durable pattern."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The stable user detail to remember, written in a future-useful form.",
+                },
+            },
+            "required": ["text"],
+            "additionalProperties": False,
+        },
         "format": '<command name="record_userinfo"> {text} </command>',
         "handler": lambda payload, **kwargs: manager.add_entry("user_info", {"text": payload.get("text")}),
         "filter": lambda entry: {
@@ -138,6 +343,22 @@ COMMANDS = {
     },
     "realize_insight": {
         "triggers": ["breakthrough", "becoming", "I noticed something", "you tend to", "It would be amazing if"],
+        "description": (
+            "Save a durable realization that changes how you should understand or act toward the user, "
+            "yourself, or the world. Use for genuine behavioral or conceptual shifts, "
+            "not ordinary agreement, praise, or isolated facts."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The durable realization, stated clearly enough to guide future judgment.",
+                },
+            },
+            "required": ["text"],
+            "additionalProperties": False,
+        },
         "format": '<command name="realize_insight"> {text} </command>',
         "handler": lambda payload, **kwargs: manager.add_entry("insights", {"text": payload.get("text")}),
         "filter": lambda entry: {
@@ -155,6 +376,22 @@ COMMANDS = {
     },
     "note_to_self": {
         "triggers": ["thinking aloud", "keep in mind", "note this", "I need to remember", "consider this"],
+        "description": (
+            "Write a private working note to your Inner Monologue. Use for pending threads, "
+            "hunches, follow-ups, questions, or temporary context worth revisiting. "
+            "Unlike a fact or insight, this may be provisional and should be pruned when resolved."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The private working note, question, or future thread to preserve.",
+                },
+            },
+            "required": ["text"],
+            "additionalProperties": False,
+        },
         "format": '<command name="note_to_self"> {text} </command>',
         "handler": lambda payload, **kwargs: manager.add_entry("inner_monologue", {"text": payload.get("text")}),
         "filter": lambda entry: {
@@ -172,6 +409,62 @@ COMMANDS = {
     },
     "manage_memories": {
         "triggers": ["edit that memory", "edit this memory", "update that memory", "delete that memory", "forget that"],
+        "description": (
+            "Edit, add, or delete entries in an existing memory layer. Use exact entry IDs when "
+            "editing or deleting. Respect each layer's stated purpose and stewardship rules: "
+            "do not treat this as a way to casually rewrite durable history."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "The target memory-layer ID, such as user_info, insights, facts, or inner_monologue.",
+                },
+                "changes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "description": (
+                        "One or more changes. Each item has type add, edit, or delete. "
+                        "Add uses entry, edit uses id and fields, and delete uses id."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "enum": ["add", "edit", "delete"],
+                                "description": "The kind of memory change to perform.",
+                            },
+                            "id": {
+                                "type": "string",
+                                "description": "Required for edit or delete: the existing entry ID.",
+                            },
+                            "entry": {
+                                "type": "object",
+                                "properties": {
+                                    "text": {
+                                        "type": "string",
+                                        "description": "Required for add: text for the new memory entry.",
+                                    },
+                                },
+                                "additionalProperties": True,
+                                "description": "Required for add: the new entry data.",
+                            },
+                            "fields": {
+                                "type": "object",
+                                "additionalProperties": True,
+                                "description": "Required for edit: fields to change on the existing entry.",
+                            },
+                        },
+                        "required": ["type"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "required": ["id", "changes"],
+            "additionalProperties": False,
+        },
         "format": '<command name="manage_memories"> {id: <layer_id>, changes: [{type: add|edit|delete, ...}]} </command>\n'
                 "# Add\n"
                 '<command name="manage_memories"> {\"id\": \"insights\", \"changes\": [{\"type\": \"add\", \"entry\": {\"text\": \"...\"}}]} </command>\n'
@@ -531,6 +824,69 @@ def manage_memories_handler(payload):
         })
 
     return results
+
+def format_required_fields(parameters: dict) -> str:
+    required = parameters.get("required", [])
+
+    if not required:
+        return "none"
+
+    return ", ".join(f"`{field}`" for field in required)
+
+def build_command_format(
+    name: str,
+    parameters: dict,
+    example_payload: dict | None = None,
+) -> str:
+    if example_payload is None:
+        example_payload = build_schema_example(parameters)
+
+    payload_json = json.dumps(example_payload, ensure_ascii=False)
+    return f'<command name="{name}"> {payload_json} </command>'
+
+
+def build_schema_example(schema: dict, field_name: str | None = None):
+    if "example" in schema:
+        return schema["example"]
+
+    if "default" in schema:
+        return schema["default"]
+
+    if "enum" in schema:
+        return f"<{'|'.join(str(value) for value in schema['enum'])}>"
+
+    schema_type = schema.get("type")
+
+    # OpenAI-style optional/nullable schemas may use ["string", "null"].
+    if isinstance(schema_type, list):
+        non_null_types = [t for t in schema_type if t != "null"]
+        schema_type = non_null_types[0] if non_null_types else "null"
+
+    if schema_type == "object":
+        return {
+            key: build_schema_example(value, key)
+            for key, value in schema.get("properties", {}).items()
+        }
+
+    if schema_type == "array":
+        item_schema = schema.get("items", {})
+        return [build_schema_example(item_schema, field_name)]
+
+    if schema_type == "boolean":
+        return False
+
+    if schema_type == "integer":
+        return 0
+
+    if schema_type == "number":
+        return 0.0
+
+    if schema_type == "null":
+        return None
+
+    # Default: string-ish placeholder.
+    label = (field_name or "VALUE").upper()
+    return f"<{label}>"
 
 
 def register_core_commands(registry):

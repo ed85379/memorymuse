@@ -9,6 +9,31 @@ from app.core.games.game_service import take_game_turn_command_handler, build_tu
 COMMANDS = {
     "take_game_turn": {
         "triggers": [],
+        "description": (
+            "Commit your authoritative turn in the active game. Use an exact move or transition "
+            "from the legal choices supplied in current game context. Every turn must explicitly "
+            "replace, revise, reaffirm, or clear muse_plan; do not silently retain a stale plan."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "move": {
+                    "type": "string",
+                    "description": (
+                        "An exact legal move or transition from the active game's supplied legal choices."
+                    ),
+                },
+                "muse_plan": {
+                    "type": ["string", "null"],
+                    "description": (
+                        "Iris's new, revised, or explicitly reaffirmed strategic plan for the next "
+                        "game context; use null when no coherent plan remains."
+                    ),
+                },
+            },
+            "required": ["move", "muse_plan"],
+            "additionalProperties": False,
+        },
         "format": (
             '<command name="take_game_turn"> '
             '{"move": "<exact move from Legal moves>", '
