@@ -234,6 +234,28 @@ def view_image(image_url=None, file_id=None):
     }
 
 
+# Utilities
+def format_tool_results_for_history(tool_results: list[dict]) -> str | None:
+    rendered = []
+
+    for receipt in tool_results or []:
+        tool_name = receipt.get("tool_name")
+        if not tool_name:
+            continue
+
+        definition = tool_registry.get(tool_name)
+        renderer = definition.get("render_history") if definition else None
+        if not renderer:
+            continue
+
+        text = renderer(receipt)
+        if text:
+            rendered.append(text)
+
+    return "\n".join(rendered) or None
+
+# Registry
+
 OPENAI_NATIVE_TOOLS = {"web_search"}
 
 def build_tool_bundle(tool_names):

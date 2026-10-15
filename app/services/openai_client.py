@@ -317,15 +317,24 @@ def collect_assets_from_tool_result(tool_result: dict) -> list[dict]:
 
     return []
 
-def collect_tool_results_from_tool_result(tool_result: dict) -> list[dict]:
-    raw_tool_results = tool_result.get("tool_results") or []
+def collect_tool_results_from_tool_result(
+    tool_result: dict,
+    *,
+    tool_name: str,
+) -> list[dict]:
+    receipts = tool_result.get("tool_results") or []
 
-    if isinstance(raw_tool_results, list):
-        return raw_tool_results
-    if isinstance(raw_tool_results, dict):
-        return [raw_tool_results]
+    if not isinstance(receipts, list):
+        return []
 
-    return []
+    return [
+        {
+            **receipt,
+            "tool_name": tool_name,
+        }
+        for receipt in receipts
+        if isinstance(receipt, dict)
+    ]
 
 async def get_openai_response(
     dev_prompt,
@@ -536,7 +545,10 @@ async def get_openai_response(
                 if tool_assets:
                     assets.extend(tool_assets)
 
-                displayed_tool_results = collect_tool_results_from_tool_result(tool_result)
+                displayed_tool_results = collect_tool_results_from_tool_result(
+                    tool_result,
+                    tool_name=function_name
+                )
                 if displayed_tool_results:
                     tool_results.extend(displayed_tool_results)
 

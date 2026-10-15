@@ -8,6 +8,7 @@ from app.config import (
 )
 from app.core.text_filters import get_text_filter_config, filter_text
 from app.core.games.game_service import format_game_metadata_for_history, format_turn_actions_for_history
+from app.core.tools.core_tools import format_tool_results_for_history
 
 LOCATIONS = {
     "frontend": "UI / Frontend",
@@ -220,6 +221,13 @@ def format_context_entry(
 
             if turn_history:
                 msg = f"{msg}\n\n{turn_history}" if msg else turn_history
+
+        tool_results = metadata.get("tool_results") or []
+        tool_history = format_tool_results_for_history(tool_results)
+
+        if tool_history:
+            msg = f"{msg}\n\n{tool_history}" if msg else tool_history
+
 
     # --- Build lines ---
     # Line 1: "5 minutes ago - Ed said:"  (or just "Ed said:" if no htime)

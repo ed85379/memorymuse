@@ -102,6 +102,23 @@ def roll_dice_handler(
     }
 
 
+def render_dice_roll_history(receipt: dict) -> str | None:
+    if receipt.get("kind") != "dice_roll":
+        return None
+
+    rolls = receipt.get("rolls") or []
+    expression = receipt.get("expression") or "dice"
+    modifier = receipt.get("modifier", 0)
+    total = receipt.get("total")
+    visibility = receipt.get("visibility", "shared")
+    reason = receipt.get("reason") or "unspecified"
+
+    return (
+        f"[Dice roll — {visibility}] "
+        f"{expression} → {rolls} + {modifier} = {total}. "
+        f"Reason: {reason}"
+    )
+
 TOOL_REGISTRY = {
     "roll_dice": {
         "schema": {
@@ -160,6 +177,7 @@ TOOL_REGISTRY = {
             "error": "The dice are cocked."
         },
         "handler": roll_dice_handler,
+        "render_history": render_dice_roll_history,
     },
 }
 
