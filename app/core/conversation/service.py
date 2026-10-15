@@ -274,6 +274,7 @@ async def handle_conversation_turn(data: dict, client):
         "metadata": {
             "usage": result.usage,
             "tool_calls": result.tool_calls,
+            "tool_results": result.tool_results,
             "assets": result.assets,
             **command_metadata,
         },
@@ -305,6 +306,7 @@ async def handle_conversation_turn(data: dict, client):
 def merge_turn_results(primary, secondary):
     primary.usage.extend(secondary.usage)
     primary.tool_calls.extend(secondary.tool_calls)
+    primary.tool_results.extend(secondary.tool_results)
     primary.assets.extend(secondary.assets)
     primary.cmd_results.extend(secondary.cmd_results)
 

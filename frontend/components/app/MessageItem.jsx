@@ -6,7 +6,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import MessageActions from "./MessageActions";
 import TTSController from "./TTSController";
-import { BookMarked, EyeOff, MessageCircleHeart, MessageCircleOff } from "lucide-react";
+import { BookMarked, Dices, EyeOff, MessageCircleHeart, MessageCircleOff } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
 const formatTimestamp = (utcString) => {
@@ -340,6 +340,120 @@ function GameTurnOutput({ turnActions }) {
               </details>
             )}
           </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DiceRollResult({ result }) {
+  const {
+    expression,
+    rolls,
+    modifier,
+    total,
+    reason,
+    visibility,
+  } = result;
+
+  if (visibility === "hidden") {
+    return (
+      <div className="rounded-md border border-purple-500/20 bg-neutral-950/30 px-3 py-2">
+        <div className="flex items-center gap-2 text-sm text-purple-100">
+          <Dices
+            className="shrink-0 text-purple-300"
+            size={18}
+            aria-hidden="true"
+          />
+          <span>Hidden dice were rolled.</span>
+        </div>
+      </div>
+    );
+  }
+
+  const rollText =
+    Array.isArray(rolls) && rolls.length > 0
+      ? rolls.join(" + ")
+      : null;
+
+  const modifierText =
+    typeof modifier === "number" && modifier !== 0
+      ? `${modifier > 0 ? "+" : "−"} ${Math.abs(modifier)}`
+      : null;
+
+  return (
+    <div className="rounded-md border border-purple-500/25 bg-neutral-950/35 px-3 py-2">
+      <div className="flex items-start gap-2 text-sm text-purple-100">
+        <Dices
+          className="mt-0.5 shrink-0 text-purple-300"
+          size={28}
+          aria-hidden="true"
+        />
+
+        <div className="min-w-0 leading-snug">
+          <div className="font-medium">
+            Reason: {reason || "Dice roll"}
+          </div>
+
+          <div className="mt-0.5 text-xs text-neutral-300">
+            {expression && (
+              <span className="text-purple-200">{expression}</span>
+            )}
+
+            {rollText && (
+              <>
+                {expression && <span className="mx-1">→</span>}
+                <span>{rollText}</span>
+              </>
+            )}
+
+            {modifierText && (
+              <span className="ml-1">{modifierText}</span>
+            )}
+
+            {typeof total === "number" && (
+              <>
+                <span className="mx-1">=</span>
+                <strong className="text-purple-100">{total}</strong>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// To add a visible tool result:
+// 1. Return a display-safe metadata.tool_results item with a stable `kind`.
+// 2. Add a JSX renderer here.
+// 3. Register that renderer below.
+// Invisible/backstage tools simply return no tool_results item.
+
+const TOOL_RESULT_RENDERERS = {
+  dice_roll: DiceRollResult,
+};
+
+function ToolResults({ results }) {
+  if (!Array.isArray(results) || results.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      {results.map((result, index) => {
+        const Renderer = TOOL_RESULT_RENDERERS[result?.kind];
+
+        if (!Renderer) {
+          console.warn("Unknown tool result kind:", result?.kind, result);
+          return null;
+        }
+
+        return (
+          <Renderer
+            key={result.call_id || `${result.kind}-${index}`}
+            result={result}
+          />
         );
       })}
     </div>
@@ -702,6 +816,8 @@ const MessageItem = React.memo(
             }))}
 
             <GameTurnOutput turnActions={msg.metadata?.turn_actions} />
+
+            <ToolResults results={msg.metadata?.tool_results} />
 
             {msg.metadata?.assets?.length > 0 && (
               <div className="message-assets">

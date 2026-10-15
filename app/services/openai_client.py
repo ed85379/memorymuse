@@ -317,6 +317,16 @@ def collect_assets_from_tool_result(tool_result: dict) -> list[dict]:
 
     return []
 
+def collect_tool_results_from_tool_result(tool_result: dict) -> list[dict]:
+    raw_tool_results = tool_result.get("tool_results") or []
+
+    if isinstance(raw_tool_results, list):
+        return raw_tool_results
+    if isinstance(raw_tool_results, dict):
+        return [raw_tool_results]
+
+    return []
+
 async def get_openai_response(
     dev_prompt,
     client,
@@ -332,6 +342,7 @@ async def get_openai_response(
     tool_calls = []
     usage_records = []
     assets = []
+    tool_results = []
 
     try:
         compiled_messages = build_openai_input_messages(user_assistant_messages)
@@ -434,6 +445,7 @@ async def get_openai_response(
                 return {
                     "text": final_text,
                     "tool_calls": tool_calls,
+                    "tool_results": tool_results,
                     "usage": usage_records,
                     "assets": assets,
                 }
@@ -446,6 +458,7 @@ async def get_openai_response(
                 return {
                     "text": final_text,
                     "tool_calls": tool_calls,
+                    "tool_results": tool_results,
                     "usage": usage_records,
                     "assets": assets,
                 }
@@ -523,6 +536,10 @@ async def get_openai_response(
                 if tool_assets:
                     assets.extend(tool_assets)
 
+                displayed_tool_results = collect_tool_results_from_tool_result(tool_result)
+                if displayed_tool_results:
+                    tool_results.extend(displayed_tool_results)
+
                 tool_output = tool_result["tool_output"]
                 attachments = tool_result.get("attachments", [])
 
@@ -571,6 +588,7 @@ async def get_openai_response(
         return {
             "text": "",
             "tool_calls": tool_calls,
+            "tool_results": tool_results,
             "usage": usage_records,
             "assets": assets,
             "error": str(e),

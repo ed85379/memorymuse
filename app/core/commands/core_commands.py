@@ -211,7 +211,7 @@ COMMANDS = {
             "Save a durable project-specific fact: an architectural decision, important seam, "
             "setting canon, or future-relevant direction that belongs to one project. "
             "Use the current project by default; include project_id only when deliberately saving "
-            "to a different project."
+            "to a different project, or if no project is currently active."
         ),
         "parameters": {
             "type": "object",

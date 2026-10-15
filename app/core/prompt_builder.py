@@ -20,6 +20,7 @@ from app.core.time_location_utils import _load_user_location, get_local_human_ti
 from app.core.assets.assets_core import find_living_asset_by_id, read_asset_base64
 from app.core.games.game_service import render_game_prompt_contexts
 from app.core.context_formatting import format_context_entry
+from app.core.journaling.journaling_core import add_journal_snippets
 
 
 def collect_prompt_context(**context_kwargs):
@@ -61,6 +62,7 @@ def collect_prompt_context(**context_kwargs):
     active_game_id = context_kwargs.get("active_game_id", "")
     applied_turn_results = context_kwargs.get("applied_turn_results", [])
     game_panel_open = context_kwargs.get("game_panel_open", False)
+    retrieval_query = context_kwargs.get("retrieval_query", None)
 
     return {
         "local_timestamp": local_timestamp,
@@ -91,6 +93,7 @@ def collect_prompt_context(**context_kwargs):
         "active_game_id": active_game_id,
         "applied_turn_results": applied_turn_results,
         "game_panel_open": game_panel_open,
+        "retrieval_query": retrieval_query,
     }
 
 
@@ -140,6 +143,7 @@ class PromptBuilder:
         "conversation_context",
         "formatting_instructions",
         "journal_snippets",
+        "journal_snippets_v2",
         "conversation",
         "semantic_recall_messages",
         "recent_messages",
@@ -213,6 +217,7 @@ class PromptBuilder:
         data = {}
 
         included_messages = set(prompt_plan.get("message_sections", []))
+        context_options = prompt_plan.get("context_options", {})
 
         needs_conversation_context = bool(
             {"extended_history_messages", "semantic_recall_messages", "recent_messages"}
@@ -233,6 +238,11 @@ class PromptBuilder:
                 proj_code_intensity=ctx["project_code_intensity"],
                 public=ctx["public"],
                 game_panel_open=ctx["game_panel_open"],
+                retrieval_query=ctx.get("retrieval_query"),
+                include_recent_in_semantic_retrieval=context_options.get(
+                    "include_recent_in_semantic_retrieval",
+                    True,
+                ),
             )
 
             messages_meta = payload.get("_meta", {})
@@ -308,6 +318,9 @@ class PromptBuilder:
                 source=ctx["source"]
             ),
             "journal_snippets": lambda ctx: self.add_journal_thoughts(
+                query=user_input,
+            ),
+            "journal_snippets_v2": lambda ctx: add_journal_snippets(
                 query=user_input,
             ),
             "state_system_messages": lambda ctx: self.build_state_system_message(ctx["active_project_report"], ctx["project_name"]),
@@ -739,7 +752,7 @@ class PromptBuilder:
                            projects_in_focus,
                            blend_ratio,
                            thread_id=None,
-                           message_ids_to_exclude=[],
+                           message_ids_to_exclude=None,
                            final_top_k=20,
                            recent_count=20,
                            extended_history=False,
@@ -748,6 +761,8 @@ class PromptBuilder:
                            proj_code_intensity="MIXED",
                            sources=utils.SOURCES_CONTEXT,
                            game_panel_open=False,
+                           retrieval_query=None,
+                           include_recent_in_semantic_retrieval=True,
                            ):
         # Pull recents
         recent_entries = memory_core.get_immediate_context(
@@ -787,25 +802,36 @@ class PromptBuilder:
         for proj in projects_in_focus:
             blend[proj] = blend_ratio / len(projects_in_focus)  # Split if multiple
 
-        # Build context-bundled query
-        conversation_context  = memory_core.get_semantic_episode_context(collection_name=QDRANT_CONVERSATION_COLLECTION,
-                                                                         n_recent=6,
-                                                                         hours=1,
-                                                                         similarity_threshold=0.50,
-                                                                         public=public,
-                                                                         proj_code_intensity=proj_code_intensity
-                                                                         )
+        # Determine which prop to use for semantic matching
+        semantic_query = (
+            retrieval_query
+            if retrieval_query is not None
+            else user_input
+        )
 
-        filter_cfg = get_text_filter_config("SEARCH", "EMBEDDING", proj_code_intensity)
 
-        # Filter each context message individually
-        filtered_context_messages = [
-            filter_text(msg["message"], filter_cfg)
-            for msg in conversation_context
-        ]
+        if include_recent_in_semantic_retrieval:
+            # Build context-bundled query
+            conversation_context  = memory_core.get_semantic_episode_context(collection_name=QDRANT_CONVERSATION_COLLECTION,
+                                                                             n_recent=6,
+                                                                             hours=1,
+                                                                             similarity_threshold=0.50,
+                                                                             public=public,
+                                                                             proj_code_intensity=proj_code_intensity
+                                                                             )
 
-        # Join filtered context + raw user input into one query string
-        full_context_query = "\n".join(filtered_context_messages + [user_input])
+            filter_cfg = get_text_filter_config("SEARCH", "EMBEDDING", proj_code_intensity)
+
+            # Filter each context message individually
+            filtered_context_messages = [
+                filter_text(msg["message"], filter_cfg)
+                for msg in conversation_context
+            ]
+
+            # Join filtered context + raw user input into one query string
+            full_context_query = "\n".join(filtered_context_messages + [semantic_query])
+        else:
+            full_context_query = semantic_query
 
         # Build exclusion set BEFORE final semantic selection.
         # `recent_entries` still includes all immediate thread history here,
@@ -821,7 +847,7 @@ class PromptBuilder:
         # that existing candidate pool.
         blended_semantic = memory_core.search_contextual_semantic_recall(
             candidate_query=full_context_query,
-            rerank_query=user_input,
+            rerank_query=semantic_query,
             projects_in_focus=projects_in_focus,
             blend_ratio=blend_ratio,
             thread_id=thread_id,

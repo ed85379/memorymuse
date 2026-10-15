@@ -20,6 +20,7 @@ def build_webui_prompt(user_input, **kwargs):
             "memory_layers",
             "conversation_context",
             "journal_snippets",
+            #"journal_snippets_v2",
             "semantic_recall_messages",
             "recent_messages",
             "state_system_messages",
@@ -40,6 +41,7 @@ def build_webui_prompt(user_input, **kwargs):
             "manage_memories",
             "set_reminder",
             "search_reminders",
+            "write_journal",
         ],
         "tools": [
             "search_memory",
@@ -49,7 +51,9 @@ def build_webui_prompt(user_input, **kwargs):
             "view_image",
             "read_webpage",
             "generate_muse_image",
-            "generate_image"
+            "generate_image",
+            "roll_dice",
+            #"read_journal_entry",
         ],
     }
     assembled_prompt_sections = builder.assemble_prompt_sections(user_input, prompt_plan, **ctx)
@@ -59,6 +63,41 @@ def build_webui_prompt(user_input, **kwargs):
     tool_bundle = assembled_prompt_sections["tool_bundle"]
 
     return dev_prompt, messages, tool_bundle
+
+# Temporary
+def build_journal_migration_prompt(user_input, **kwargs):
+    builder = PromptBuilder()
+    ctx = collect_prompt_context(**kwargs)
+    prompt_plan = {
+        "developer_sections": ["laws", "profile", "principles"],
+        "message_sections": [
+            "project_list",
+            "memory_layers",
+            "semantic_recall_messages",
+        ],
+        "current_user": {
+            "mode": "raw",
+            "addons": [],
+        },
+        "layers": [
+            "facts",
+            "user_info",
+            "insights",
+        ],
+        "commands": [],
+        "tools": [
+            "search_memory",
+            "read_webpage",
+        ],
+    }
+    assembled_prompt_sections = builder.assemble_prompt_sections(user_input, prompt_plan, **ctx)
+
+    dev_prompt = assembled_prompt_sections["developer_text"]
+    messages = assembled_prompt_sections["messages"]
+    tool_bundle = assembled_prompt_sections["tool_bundle"]
+
+    return dev_prompt, messages, tool_bundle
+
 # </editor-fold>
 # <editor-fold desc="scene_api_prompt">
 def build_scene_webui_prompt(user_input, **kwargs):

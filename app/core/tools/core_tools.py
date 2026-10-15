@@ -20,6 +20,8 @@ def run_tool(function_name, arguments, handlers):
         return {
             "tool_output": result,
             "attachments": [],
+            "assets": [],
+            "tool_results": [],
         }
 
     attachments = result.get("attachments") or []
@@ -30,10 +32,15 @@ def run_tool(function_name, arguments, handlers):
     if not isinstance(assets, list):
         raise ValueError(f"Tool {function_name} returned non-list assets")
 
+    tool_results = result.get("tool_results") or []
+    if not isinstance(tool_results, list):
+        raise ValueError(f"Tool {function_name} returned non-list tool_results")
+
     return {
         "tool_output": result.get("tool_output"),
         "attachments": attachments,
         "assets": assets,
+        "tool_results": tool_results,
     }
 
 def search_memory(

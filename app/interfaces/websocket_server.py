@@ -2,7 +2,12 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from dataclasses import dataclass, field
 from typing import Dict, Set, List
 import json
+import asyncio
+from datetime import datetime, timezone
 from app.databases.memory_indexer import assign_message_id
+#from app.services.llm.openai_responses_adapter import OpenAIResponsesAdapter
+#from app.services.llm.orchestrator import get_model_response
+from app.config import muse_settings
 
 router = APIRouter()
 
@@ -121,3 +126,37 @@ async def broadcast_message(
                 }))
         except Exception:
             connections.remove(client)
+
+async def emit_webui_status(event, function_name, ui_meta):
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    if event == "thinking":
+        message = (
+            f"{muse_settings.get_section('muse_config').get('MUSE_NAME')} "
+            f"is thinking..."
+        )
+    elif event == "tool_start":
+        message = (
+            (ui_meta or {})
+            .get(function_name, {})
+            .get("start", f"Running {function_name}...")
+        )
+    elif event == "tool_error":
+        message = (
+            (ui_meta or {})
+            .get(function_name, {})
+            .get("error", f"Error running {function_name}")
+        )
+    else:
+        return
+
+    await asyncio.wait_for(
+        broadcast_message(
+            message=message,
+            timestamp=timestamp,
+            role="muse",
+            to_modality="webui",
+            payload_type="status_message",
+        ),
+        timeout=1,
+    )

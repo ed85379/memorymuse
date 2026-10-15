@@ -1,6 +1,7 @@
 from fastapi import FastAPI, APIRouter
 import asyncio
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.interfaces.websocket_server import router as websocket_router
 from app.interfaces.websocket_server import broadcast_message
 from app.core.memory_core import log_message, purge_message_job
@@ -33,6 +34,11 @@ from app.core.reminders.commands import register_reminder_commands
 from app.core.initiative.scheduler_tasks import register_scheduler_tasks as register_initiative_schedule
 from app.core.assets.scheduler_tasks import register_scheduler_tasks as register_asset_lifecycle_schedule
 from app.core.games.game_commands import register_game_commands
+from app.core.games.game_tools import register_tools as register_game_tools
+from app.core.journaling.commands import register_journaling_commands
+from app.core.journaling.tools import register_tools as register_journaling_tools
+
+
 
 print("MODULE REGISTRY ID:", id(command_registry))
 
@@ -62,11 +68,14 @@ app.state.command_registry = command_registry
 register_core_commands(command_registry)
 register_reminder_commands(command_registry)
 register_game_commands(command_registry)
+register_journaling_commands(command_registry)
 
 # Register core tools
 app.state.tool_registry = tool_registry
 register_core_tools(tool_registry)
 register_core_image_tools(tool_registry)
+register_journaling_tools(tool_registry)
+register_game_tools(tool_registry)
 
 # Register core schedules
 register_reminders_schedule()

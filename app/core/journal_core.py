@@ -11,11 +11,12 @@ from app.core.time_location_utils import get_formatted_datetime
 # ----------------------
 
 
-def search_journal(query_vector, top_k=5):
+def search_journal(query_vector, top_k=5, query_filter=None):
     client = qdrant_connector.get_qdrant_client()
     results = client.search(
         collection_name=QDRANT_JOURNAL_COLLECTION,
         query_vector=query_vector,
+        query_filter=query_filter,
         limit=top_k,
         with_payload=True
     )
@@ -47,7 +48,21 @@ def save_journal_catalog(entries):
     with open(JOURNAL_CATALOG_PATH, "w") as f:
         json.dump(entries, f, indent=2)
 
+def format_journal_entry(t):
+    entry_date = t.get("entry_date", "Unknown date")
+    title = t.get("title") or "Untitled"
+    body = t.get("text", "")
 
+    chunk_index = t.get("chunk_index", 0) + 1
+    chunk_count = t.get("chunk_count", "?")
+
+    return (
+        f"Date: {entry_date}\n"
+        f"Title: {title}\n"
+        f"Journal Entry ID: {t.get('journal_entry_id')}\n"
+        f"Paragraph {chunk_index}/{chunk_count}\n"
+        f"{body}"
+    )
 
 # ----------------------
 # Search Function

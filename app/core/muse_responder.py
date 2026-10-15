@@ -745,6 +745,7 @@ class RouteUserInputResult:
     usage: list = field(default_factory=list)
     followup_turn: str | None = None
     tool_calls: list = field(default_factory=list)
+    tool_results: list = field(default_factory=list)
     assets: list = field(default_factory=list)
 
 async def route_user_input(
@@ -770,6 +771,7 @@ async def route_user_input(
     )
     response = result.get("text", "")
     tool_calls = result.get("tool_calls", [])
+    tool_results = result.get("tool_results", [])
     usage = result.get("usage", [])
     assets = result.get("assets", [])
 
@@ -815,6 +817,7 @@ async def route_user_input(
         usage=usage,
         followup_turn=followup_result["intent"],
         tool_calls=tool_calls,
+        tool_results=tool_results,
         assets=assets,
     )
 
@@ -846,6 +849,7 @@ async def handle_muse_decision(
     )
     response = result.get("text", "")
     tool_calls = result.get("tool_calls", [])
+    tool_results = result.get("tool_results", [])
     usage = result.get("usage", [])
     print(f"INITIATIVE COMMAND: {response}")
 
