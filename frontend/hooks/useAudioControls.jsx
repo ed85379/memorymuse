@@ -55,6 +55,18 @@ export function useAudioControls() {
         : JSON.stringify({ text });
 
       try {
+        // Do this immediately while a manual Play click may still count as
+        // a browser user gesture. It is harmless for the existing ElevenLabs lane.
+        const audioCtx = new window.AudioContext();
+        audioCtxRef.current = audioCtx;
+
+        const source = audioCtx.createBufferSource();
+        audioSourceRef.current = source;
+
+        const resumePromise = audioCtx.resume().catch((err) => {
+          console.warn("[TTS] AudioContext resume failed:", err);
+        });
+
         const response = await fetch("/api/tts/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -63,47 +75,64 @@ export function useAudioControls() {
 
         if (!response.ok) throw new Error("TTS request failed");
 
-        const reader = response.body.getReader();
-        const audioCtx = new window.AudioContext();
-        audioCtxRef.current = audioCtx;
+        console.log(
+          "[TTS] response:",
+          response.status,
+          response.headers.get("content-type"),
+        );
 
-        const source = audioCtx.createBufferSource();
-        audioSourceRef.current = source;
-
-        const chunks = [];
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(...value);
-        }
+        const buffer = await response.arrayBuffer();
 
         if (cancelled) return;
 
-        const buffer = new Uint8Array(chunks).buffer;
-        const thisCtx = audioCtx;
-        const thisSource = source;
+        console.log("[TTS] downloaded bytes:", buffer.byteLength);
+        console.log("[TTS] AudioContext state before decode:", audioCtx.state);
 
-        audioCtx.decodeAudioData(buffer, (decoded) => {
-          if (audioCtxRef.current !== thisCtx) return;
-          if (!decoded) return;
+        await resumePromise;
 
-          thisSource.buffer = decoded;
-          thisSource.connect(thisCtx.destination);
-          thisSource.start(0);
+        let decoded;
+        try {
+          // slice() avoids decodeAudioData detaching the original ArrayBuffer.
+          decoded = await audioCtx.decodeAudioData(buffer.slice(0));
+        } catch (err) {
+          console.error("[TTS] decodeAudioData FAILED:", err);
+          throw err;
+        }
 
-          thisSource.onended = () => {
-            if (audioSourceRef.current === thisSource) {
-              audioSourceRef.current = null;
-            }
-            if (audioCtxRef.current === thisCtx) {
-              audioCtxRef.current = null;
-            }
-            setSpeaking(false);
-            setIsTTSPlaying(false);
-            if (onDone) onDone();
-          };
-        });
+        if (audioCtxRef.current !== audioCtx || cancelled) return;
+
+        console.log(
+          "[TTS] decoded:",
+          `${decoded.duration.toFixed(2)}s`,
+          `${decoded.sampleRate}Hz`,
+          `${decoded.numberOfChannels}ch`,
+        );
+
+        if (audioCtx.state !== "running") {
+          console.warn("[TTS] context not running; retrying resume:", audioCtx.state);
+          await audioCtx.resume();
+        }
+
+        source.buffer = decoded;
+        source.connect(audioCtx.destination);
+
+        console.log("[TTS] starting source; context:", audioCtx.state);
+
+        source.start(0);
+        source.onended = () => {
+          if (audioSourceRef.current === source) {
+            audioSourceRef.current = null;
+          }
+          if (audioCtxRef.current === audioCtx) {
+            audioCtxRef.current = null;
+          }
+          setSpeaking(false);
+          setIsTTSPlaying(false);
+          if (onDone) onDone();
+        };
       } catch (err) {
+        console.error("[TTS] playback failed:", err);
+
         if (!cancelled) {
           setSpeaking(false);
           setIsTTSPlaying(false);
