@@ -84,10 +84,12 @@ def build_journal_migration_prompt(user_input, **kwargs):
             "user_info",
             "insights",
         ],
+        "context_options": {
+            "include_recent_in_semantic_retrieval": False,
+        },
         "commands": [],
         "tools": [
-            "search_memory",
-            "read_webpage",
+            #"search_memory",
         ],
     }
     assembled_prompt_sections = builder.assemble_prompt_sections(user_input, prompt_plan, **ctx)

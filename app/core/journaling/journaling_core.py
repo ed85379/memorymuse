@@ -49,6 +49,25 @@ def ensure_journal_storage():
         name="entry_date",
     )
 
+    collection.create_index(
+        [
+            ("deleted_at", ASCENDING),
+            ("entry_date", DESCENDING),
+            ("created_at", DESCENDING),
+            ("journal_entry_id", DESCENDING),
+        ],
+        name="journal_catalog_order",
+    )
+    collection.create_index(
+        [
+            ("deleted_at", ASCENDING),
+            ("viewed_at", ASCENDING),
+            ("entry_date", DESCENDING),
+            ("created_at", DESCENDING),
+        ],
+        name="journal_unviewed_catalog_order",
+    )
+
     return collection
 
 
@@ -164,6 +183,7 @@ def create_journal_entry(
         "created_at": now,
         "updated_at": now,
         "deleted_at": None,
+        "viewed_at": None,
 
         "indexing": {
             "status": "pending",
@@ -208,6 +228,215 @@ def get_journal_entry(
         query["deleted_at"] = None
 
     return mongo.find_one_document(MONGO_JOURNAL_COLLECTION, query)
+
+JOURNAL_CATALOG_PROJECTION = {
+    "_id": 0,
+    "journal_entry_id": 1,
+    "title": 1,
+    "visibility": 1,
+    "entry_date": 1,
+    "created_at": 1,
+    "updated_at": 1,
+    "viewed_at": 1,
+}
+
+
+def _validate_optional_visibility(visibility: str | None) -> str | None:
+    if visibility is None:
+        return None
+
+    normalized = visibility.strip().lower()
+    if normalized not in JOURNAL_VISIBILITIES:
+        raise ValueError(
+            f"Unsupported journal visibility {visibility!r}. "
+            f"Expected one of: {sorted(JOURNAL_VISIBILITIES)}"
+        )
+    return normalized
+
+
+def _validate_list_paging(
+    *,
+    limit: int,
+    offset: int,
+) -> tuple[int, int]:
+    try:
+        limit = int(limit)
+        offset = int(offset)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Journal list limit and offset must be integers.") from exc
+
+    if limit < 1:
+        raise ValueError("Journal list limit must be at least 1.")
+
+    if offset < 0:
+        raise ValueError("Journal list offset cannot be negative.")
+
+    return min(limit, 100), offset
+
+
+def list_journal_entries(
+    *,
+    visibility: str | None = None,
+    unviewed_only: bool = False,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """
+    Return safe Journal UI catalog data only.
+
+    This deliberately never returns body, body_ciphertext, subject,
+    subject_ciphertext, or indexing internals.
+    """
+    visibility = _validate_optional_visibility(visibility)
+    limit, offset = _validate_list_paging(
+        limit=limit,
+        offset=offset,
+    )
+
+    query = {
+        "deleted_at": None,
+    }
+    if visibility:
+        query["visibility"] = visibility
+
+    if unviewed_only:
+        # Mongo matches both explicit null and legacy documents that lack the field.
+        query["viewed_at"] = None
+
+    collection = mongo.get_collection(MONGO_JOURNAL_COLLECTION)
+
+    total = collection.count_documents(query)
+    entries = list(
+        collection.find(
+            query,
+            JOURNAL_CATALOG_PROJECTION,
+        )
+        .sort([
+            ("entry_date", DESCENDING),
+            ("created_at", DESCENDING),
+            ("journal_entry_id", DESCENDING),
+        ])
+        .skip(offset)
+        .limit(limit)
+    )
+
+    return {
+        "entries": entries,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+def count_unviewed_journal_entries(
+    *,
+    visibility: str | None = None,
+) -> int:
+    """
+    Lightweight Journal-tab badge query.
+    """
+    visibility = _validate_optional_visibility(visibility)
+
+    query = {
+        "deleted_at": None,
+        "viewed_at": None,
+    }
+    if visibility:
+        query["visibility"] = visibility
+
+    return mongo.count_matching_documents(
+        MONGO_JOURNAL_COLLECTION,
+        query,
+    )
+
+def mark_journal_entry_viewed(
+    journal_entry_id: str,
+) -> dict:
+    """
+    Record the first time Ed successfully opens/views a journal entry.
+
+    Deliberately does not update updated_at: opening an entry is not editing it.
+    """
+    now = get_formatted_datetime()
+
+    updated = mongo.update_one_document(
+        MONGO_JOURNAL_COLLECTION,
+        {
+            "journal_entry_id": journal_entry_id,
+            "deleted_at": None,
+            "viewed_at": None,
+        },
+        {
+            "viewed_at": now,
+        },
+    )
+    if updated:
+        return updated
+
+    entry = get_journal_entry(journal_entry_id)
+    if not entry:
+        raise ValueError(
+            f"Active journal entry {journal_entry_id!r} was not found."
+        )
+
+    # Already viewed: intentionally idempotent.
+    return entry
+
+
+def mark_journal_entry_unviewed(
+    journal_entry_id: str,
+) -> dict:
+    """
+    Allow Ed to restore an entry to the unviewed/new state.
+    """
+    entry = get_journal_entry(journal_entry_id)
+    if not entry:
+        raise ValueError(
+            f"Active journal entry {journal_entry_id!r} was not found."
+        )
+
+    return mongo.update_one_document(
+        MONGO_JOURNAL_COLLECTION,
+        {
+            "journal_entry_id": journal_entry_id,
+            "deleted_at": None,
+        },
+        {
+            "viewed_at": None,
+        },
+    )
+
+def get_journal_entry_for_ui(
+    journal_entry_id: str,
+) -> dict | None:
+    """
+    Return one entry in the form Ed's Journal UI is allowed to receive.
+
+    Shared entries include their body.
+    Private entries expose catalog metadata only.
+    """
+    entry = get_journal_entry(
+        journal_entry_id,
+        include_deleted=False,
+    )
+    if not entry:
+        return None
+
+    result = {
+        "journal_entry_id": entry["journal_entry_id"],
+        "title": entry.get("title") or "Untitled journal",
+        "visibility": entry.get("visibility"),
+        "entry_date": entry.get("entry_date"),
+        "created_at": entry.get("created_at"),
+        "updated_at": entry.get("updated_at"),
+        "viewed_at": entry.get("viewed_at"),
+        "body_available": entry.get("visibility") == "shared",
+    }
+
+    if entry.get("visibility") == "shared":
+        result["body"] = entry.get("body") or ""
+
+    return result
 
 def read_journal_entry(
     journal_entry_id: str,

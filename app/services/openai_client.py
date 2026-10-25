@@ -38,6 +38,7 @@ PROMPT_CACHE_KEYS = {
     "audio": "iris_audio_v1",
     "mnemosyne": "iris_mnemosyne_v1",
     "summarizer": "iris_summarizer_v1",
+    "journal_migration": "iris_journal_migration_v1",
 }
 
 

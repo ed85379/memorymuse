@@ -7,7 +7,13 @@ from app.config import muse_settings
 from app.core.utils import get_adaptive_top_k, strip_muse_private_blocks, strip_gm_notes
 from app.core.states_core import set_active_project
 from app.core.muse_responder import route_user_input
-from app.core.prompt_profiles import build_webui_prompt, build_scene_webui_prompt, build_discord_prompt, build_speaker_prompt
+from app.core.prompt_profiles import (
+    build_webui_prompt,
+    build_scene_webui_prompt,
+    build_discord_prompt,
+    build_speaker_prompt,
+    build_journal_migration_prompt,
+)
 from app.api.queues import broadcast_queue, log_queue
 from app.interfaces.websocket_server import broadcast_message
 from app.core.threads_core import get_thread_type
@@ -373,7 +379,72 @@ def build_prompt_for_type(prompt_type: str, user_input: str, prompt_kwargs: dict
             **prompt_kwargs,
         )
 
+    if prompt_type == "journal_migration":
+        return build_journal_migration_prompt(
+            user_input,
+            **prompt_kwargs,
+        )
+
     raise ValueError(f"Unknown prompt_type: {prompt_type}")
+
+async def run_isolated_model_turn(
+    *,
+    prompt_type: str,
+    user_input: str,
+    prompt_kwargs: dict,
+    client,
+):
+    """
+    Run a prompt profile without creating, broadcasting, or logging ordinary
+    conversation messages.
+
+    Intended for bounded worker jobs such as journal migration classification.
+    The caller owns persistence of the final structured result.
+    """
+    dev_prompt, user_assistant_messages, tool_bundle = build_prompt_for_type(
+        prompt_type=prompt_type,
+        user_input=user_input,
+        prompt_kwargs=prompt_kwargs,
+    )
+
+    if not isinstance(tool_bundle, dict):
+        raise TypeError(
+            "journal_migration prompt returned an invalid tool bundle: "
+            f"{type(tool_bundle).__name__} ({tool_bundle!r})"
+        )
+
+    required_bundle_keys = {
+        "tools",
+        "tool_choice",
+        "handlers",
+        "ui_meta",
+    }
+
+    missing_bundle_keys = required_bundle_keys - set(tool_bundle)
+
+    if missing_bundle_keys:
+        raise ValueError(
+            "journal_migration tool bundle is missing keys: "
+            f"{sorted(missing_bundle_keys)}"
+        )
+
+    result = await run_conversation_model_turn(
+        dev_prompt=dev_prompt,
+        user_assistant_messages=user_assistant_messages,
+        client=client,
+        prompt_type=prompt_type,
+        tool_bundle=tool_bundle,
+        command_context={},
+    )
+
+    # Migration classification must be one bounded decision, not a normal
+    # conversational continuation.
+    if result.followup_turn:
+        raise RuntimeError(
+            "journal_migration unexpectedly requested a follow-up turn."
+        )
+
+    return result, (result.response_text or "").strip()
 
 def merge_message_metadata_updates(cmd_results) -> dict:
     merged = {}
