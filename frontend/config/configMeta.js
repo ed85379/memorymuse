@@ -52,6 +52,11 @@ export const SETTINGS_META = {
         { value: "gpt-5.6-luna", label: "gpt-5.6-luna" },
         { value: "gpt-5.6-terra", label: "gpt-5.6-terra" },
         { value: "gpt-5.6-sol", label: "gpt-5.6-sol" },
+        { value: "gpt-6-luna", label: "gpt-6-luna" },
+        { value: "gpt-6-sol", label: "gpt-6-sol" },
+        { value: "gpt-6-astra", label: "gpt-6-astra" },
+        { value: "gpt-6.1-terra", label: "gpt-6.1-terra" },
+        { value: "gpt-6.1-sol", label: "gpt-6.1-sol" },
       ],
     },
     OPENAI_FULL_MODEL: {
