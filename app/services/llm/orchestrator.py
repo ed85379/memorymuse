@@ -30,6 +30,24 @@ def _collect_assets_from_tool_result(tool_result: dict[str, Any]) -> list[dict[s
 
     return []
 
+def _collect_tool_results_from_tool_result(
+    tool_result: dict[str, Any],
+    *,
+    tool_name: str,
+) -> list[dict[str, Any]]:
+    receipts = tool_result.get("tool_results") or []
+
+    if not isinstance(receipts, list):
+        return []
+
+    return [
+        {
+            **receipt,
+            "tool_name": tool_name,
+        }
+        for receipt in receipts
+        if isinstance(receipt, dict)
+    ]
 
 async def _emit_status(
     status_callback: StatusCallback | None,
@@ -182,6 +200,7 @@ async def get_model_response(
         return {
             "text": "",
             "tool_calls": [],
+            "tool_results": [],
             "usage": [],
             "assets": [],
             "error": "No model was supplied or configured.",
@@ -190,6 +209,7 @@ async def get_model_response(
     handlers = handlers or {}
 
     tool_calls: list[dict[str, Any]] = []
+    tool_results: list[dict[str, Any]] = []
     usage_records: list[dict[str, Any]] = []
     assets: list[dict[str, Any]] = []
     completed_tool_turns = 0
@@ -230,6 +250,7 @@ async def get_model_response(
                 return {
                     "text": turn.text,
                     "tool_calls": tool_calls,
+                    "tool_results": tool_results,
                     "usage": usage_records,
                     "assets": assets,
                 }
@@ -240,6 +261,7 @@ async def get_model_response(
                 return {
                     "text": turn.text,
                     "tool_calls": tool_calls,
+                    "tool_results": tool_results,
                     "usage": usage_records,
                     "assets": assets,
                 }
@@ -265,6 +287,13 @@ async def get_model_response(
                 )
 
                 print(f"tool_result: {tool_result}")
+
+                displayed_tool_results = _collect_tool_results_from_tool_result(
+                    tool_result,
+                    tool_name=function_name
+                )
+                if displayed_tool_results:
+                    tool_results.extend(displayed_tool_results)
 
                 tool_assets = _collect_assets_from_tool_result(tool_result)
                 if tool_assets:
@@ -308,6 +337,7 @@ async def get_model_response(
         return {
             "text": "",
             "tool_calls": tool_calls,
+            "tool_results": tool_results,
             "usage": usage_records,
             "assets": assets,
             "error": str(error),

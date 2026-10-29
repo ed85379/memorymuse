@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from app.core.utils import write_system_log
 from app.core.context_formatting import build_command_response_block
 from app.core.time_location_utils import parse_iso_datetime
-from app.services.openai_client import get_openai_response
+from app.services.openai_client import get_openai_response, get_orchestrated_openai_response
 from app.config import API_URL, muse_settings
 from app.core.commands.registry import command_registry
 
@@ -758,7 +758,7 @@ async def route_user_input(
         command_context=None,
 ) -> RouteUserInputResult:
 
-    result = await get_openai_response(
+    result = await get_orchestrated_openai_response(
         dev_prompt,
         client=client,
         user_assistant_messages=user_assistant_messages,
