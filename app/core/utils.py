@@ -468,8 +468,7 @@ def build_message_match_filter(
 
 DISABLEABLE_COMMANDS = {
     "set_motd": "ENABLE_MOTD",
-    "write_public_journal": "ENABLE_JOURNAL",
-    "write_private_journal": "ENABLE_PRIVATE_JOURNAL",
+    "write_journal": "ENABLE_JOURNAL",
     "set_reminder": "ENABLE_REMINDERS",
     "search_reminders": "ENABLE_REMINDERS",
     "mention": "ENABLE_UNPROMPTED_MESSAGING",

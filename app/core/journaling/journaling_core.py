@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import date
 from uuid import NAMESPACE_URL, uuid5
+
 
 from nanoid import generate
 from pymongo import ASCENDING, DESCENDING
@@ -29,7 +32,7 @@ JOURNAL_VISIBILITIES = {"shared", "private"}
 JOURNAL_ENCRYPTION_VERSION = 1
 
 # Matches the legacy journal's embedding model for the first migration-safe cut.
-_embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
+_embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL, local_files_only=True)
 
 
 def ensure_journal_storage():
@@ -66,6 +69,13 @@ def ensure_journal_storage():
             ("created_at", DESCENDING),
         ],
         name="journal_unviewed_catalog_order",
+    )
+
+    collection.create_index(
+        [("migration.legacy_source_key", ASCENDING)],
+        unique=True,
+        sparse=True,
+        name="legacy_source_key_unique",
     )
 
     return collection
@@ -127,6 +137,115 @@ def _journal_chunk_point_id(journal_entry_id: str, chunk_index: int) -> str:
         )
     )
 
+def legacy_source_key(legacy_filename: str) -> str:
+    """
+    Stable non-human-readable identity for an imported legacy source file.
+
+    Used for idempotent migration lookup. Unlike legacy filenames, it does not
+    expose the old slugified subject in a raw Mongo document.
+    """
+    normalized = str(legacy_filename or "").strip()
+
+    if not normalized:
+        raise ValueError("legacy_filename is required for migration identity.")
+
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def build_legacy_migration_provenance(
+    *,
+    manifest: dict,
+    catalog_entry: dict,
+    visibility: str,
+    baseline_viewed_at: str,
+) -> dict:
+    """
+    Build migration provenance without leaving private legacy metadata readable
+    in canonical Mongo documents.
+
+    Shared entries preserve useful legacy metadata plainly.
+    Private entries retain the same information inside one encrypted provenance
+    blob; title/date/current visibility remain intentionally catalog-visible.
+    """
+    legacy_filename = str(manifest["legacy_filename"]).strip()
+
+    provenance = {
+        "source_system": "legacy_filesystem_journal",
+        "legacy_source_key": legacy_source_key(legacy_filename),
+
+        "legacy_datetime": manifest.get("legacy_datetime"),
+        "legacy_date": manifest.get("legacy_date"),
+        "legacy_visibility": manifest.get("legacy_visibility"),
+
+        "source_sha256": manifest.get("source_sha256"),
+        "source_encoding": manifest.get("source_encoding"),
+
+        "classifier": {
+            "version": manifest.get("classifier_version"),
+            "classified_at": manifest.get("classified_at"),
+            "classification": manifest.get("classification"),
+            "recommended_visibility": manifest.get(
+                "recommended_visibility"
+            ),
+            "visibility_confidence": manifest.get(
+                "visibility_confidence"
+            ),
+            "title_source": manifest.get("title_source"),
+            "title_confidence": manifest.get("title_confidence"),
+            "needs_manual_review": manifest.get(
+                "needs_manual_review",
+                False,
+            ),
+        },
+
+        "initial_view_state": {
+            "source": "legacy_migration_baseline",
+            "viewed_at": baseline_viewed_at,
+        },
+    }
+
+    legacy_detail = {
+        "legacy_filename": legacy_filename,
+        "legacy_subject": manifest.get("legacy_subject"),
+        "legacy_summary": manifest.get("legacy_summary"),
+        "legacy_mood": manifest.get("legacy_mood"),
+        "legacy_tags": manifest.get("legacy_tags") or [],
+        "legacy_source": manifest.get("legacy_source"),
+        "legacy_encrypted": bool(catalog_entry.get("encrypted")),
+        "classifier_reason": manifest.get("reason"),
+    }
+
+    if visibility == "private":
+        provenance["legacy_private_provenance_ciphertext"] = encrypt_text(
+            json.dumps(
+                legacy_detail,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
+        provenance["legacy_private_provenance_encryption_version"] = (
+            JOURNAL_ENCRYPTION_VERSION
+        )
+    else:
+        provenance.update(legacy_detail)
+
+    return provenance
+
+
+def get_journal_entry_by_legacy_source_key(
+    source_key: str,
+    *,
+    include_deleted: bool = True,
+) -> dict | None:
+    query = {
+        "migration.legacy_source_key": source_key,
+    }
+
+    if not include_deleted:
+        query["deleted_at"] = None
+
+    return mongo.find_one_document(MONGO_JOURNAL_COLLECTION, query)
+
 def _get_entry_body_for_internal_use(entry: dict) -> str:
     has_plaintext = "body" in entry
     has_ciphertext = "body_ciphertext" in entry
@@ -149,6 +268,8 @@ def create_journal_entry(
     visibility: str,
     entry_date: str,
     subject: str | None = None,
+    viewed_at: str | None = None,
+    migration: dict | None = None,
 ) -> dict:
     """
     Create the canonical Mongo document only.
@@ -183,7 +304,7 @@ def create_journal_entry(
         "created_at": now,
         "updated_at": now,
         "deleted_at": None,
-        "viewed_at": None,
+        "viewed_at": viewed_at,
 
         "indexing": {
             "status": "pending",
@@ -212,6 +333,9 @@ def create_journal_entry(
     else:
         doc["subject"] = subject
         doc["body"] = body
+
+    if migration is not None:
+        doc["migration"] = migration
 
     mongo.insert_one_document(MONGO_JOURNAL_COLLECTION, doc)
     return doc
@@ -708,7 +832,7 @@ def search_journal(query_vector, top_k=5, query_filter=None):
 
 def search_indexed_journal(query, top_k=5):
     query_vector = SentenceTransformer(
-        SENTENCE_TRANSFORMER_MODEL
+        SENTENCE_TRANSFORMER_MODEL, local_files_only=True
     ).encode(query).tolist()
 
     qdrant_results = search_journal(

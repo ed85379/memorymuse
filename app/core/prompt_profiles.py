@@ -19,8 +19,8 @@ def build_webui_prompt(user_input, **kwargs):
             "worldnow",
             "memory_layers",
             "conversation_context",
-            "journal_snippets",
-            #"journal_snippets_v2",
+            #"journal_snippets",
+            "journal_snippets_v2",
             "semantic_recall_messages",
             "recent_messages",
             "state_system_messages",
@@ -41,7 +41,7 @@ def build_webui_prompt(user_input, **kwargs):
             "manage_memories",
             "set_reminder",
             "search_reminders",
-            "write_journal",
+            #"write_journal",
         ],
         "tools": [
             "search_memory",
@@ -53,7 +53,7 @@ def build_webui_prompt(user_input, **kwargs):
             "generate_muse_image",
             "generate_image",
             "roll_dice",
-            #"read_journal_entry",
+            "read_journal_entry",
         ],
     }
     assembled_prompt_sections = builder.assemble_prompt_sections(user_input, prompt_plan, **ctx)
@@ -387,7 +387,7 @@ def build_speaker_prompt(user_input, **kwargs):
             "worldnow",
             "memory_layers",
             "conversation_context",
-            "journal_snippets",
+            "journal_snippets_v2",
             "semantic_recall_messages",
             "recent_messages",
         ],
@@ -415,6 +415,7 @@ def build_speaker_prompt(user_input, **kwargs):
             "search_web",
             "search_news",
             "read_webpage",
+            "read_journal_entry",
         ],
     }
     assembled_prompt_sections = builder.assemble_prompt_sections(user_input, prompt_plan, **ctx)
@@ -448,8 +449,7 @@ def build_initiative_prompt(**kwargs):
             "project_facts",
         ],
         "commands": [
-            "write_public_journal",
-            "write_private_journal",
+            "write_journal",
             "set_motd",
         ] + ([] if is_conversation_active() else ["mention"]),
         "tools": [
@@ -494,7 +494,7 @@ def build_discoveryfeeds_prompt(**kwargs):
             "project_facts",
         ],
         "commands": [
-            "write_public_journal",
+            "write_journal",
         ] + ([] if is_conversation_active() else ["mention"]),
         "tools": [
             "search_memory",

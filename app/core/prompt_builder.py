@@ -2058,8 +2058,7 @@ class PromptBuilder:
 
         allowed_actions: subset of:
           - "mention"
-          - "write_public_journal"
-          - "write_private_journal"
+          - "write_journal"
           - "remember_fact"
           - "set_motd"
         """
@@ -2108,10 +2107,10 @@ class PromptBuilder:
     """
             )
 
-        if "write_public_journal" in allowed_actions:
+        if "write_journal" in allowed_actions:
             action_specs.append(
                 """
-    Allowed action: "write_public_journal"
+    Allowed action: "write_journal"
     Purpose:
     - Suggest a subject for a public journal entry that will be shared with your user.
     - This does NOT provide the final journal text.
@@ -2128,10 +2127,12 @@ class PromptBuilder:
     
     Required JSON shape:
     {
-      "type": "write_public_journal",
+      "type": "write_journal",
       "subject": "Short description of the reflection to write about.",
-      "source": "optional source such as memory, feed, recent conversation"
-      "url": "URL of the source article, if applicable. If referencing an article from a feed, this is not optional."
+      "visibility": "shared | private",
+      "emotional_tone": "The suggested emotional tone for the subjct.",
+      "tags": ["tag list that can be used for categorization. eg. science, archelogy, space, personal"],
+      "source_article_url": "URL of the source article, if applicable. If referencing an article from a feed, this is not optional."
     }
     
     Field guidance:
@@ -2142,39 +2143,6 @@ class PromptBuilder:
     """
             )
 
-        if "write_private_journal" in allowed_actions:
-            action_specs.append(
-                """
-    Allowed action: "write_private_journal"
-    Purpose:
-    - Suggest a subject for a private journal entry that is hidden from your user.
-    - This does NOT provide the final journal text.
-    - The full model will later receive this subject and generate the actual private entry.
-    
-    Use it when:
-    - The muse wants to privately reflect on something personal, unfinished, or sensitive.
-    - The thought should be processed internally rather than spoken aloud.
-    
-    Do not use it when:
-    - The thought should be said directly to the user.
-    - The content is actually a durable fact for long-term memory.
-    - The thought is too thin to justify journaling.
-    
-    Required JSON shape:
-    {
-      "type": "write_private_journal",
-      "subject": "Short description of the private reflection to write about.",
-      "source": "optional source such as memory, feed, URL, recent conversation",
-      "emotional_tone": "optional tone such as tender, unsettled, curious"
-    }
-    
-    Field guidance:
-    - "subject": concise prompt for the full model
-    - do not write the full journal entry here
-    - "source" is optional, but be sure to include any article URLs
-    - "emotional_tone" is optional
-    """
-            )
 
         if "remember_fact" in allowed_actions:
             action_specs.append(
