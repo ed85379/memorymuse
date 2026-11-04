@@ -23,6 +23,7 @@ import {
   setThreadArchived,
   setThreadTitle,
   setThreadScene,
+  updateThread,
   updateSingleThreadInState,
   upsertThreadInState,
   deleteThread,
@@ -457,7 +458,7 @@ export default function ThreadManagerPanel({
               </div>
 
               <div className="ml-2 flex items-center gap-1 shrink-0">
-                {thread.type === "scene" && (
+
                 <button
                   type="button"
                   onClick={() => setManagingThreadId(thread.thread_id)}
@@ -465,7 +466,7 @@ export default function ThreadManagerPanel({
                 >
                   Setup
                 </button>
-                )}
+
                 {/* Open */}
                 <button
                   type="button"
@@ -796,6 +797,9 @@ function ThreadManagePopup({
   setThreads,
   fetchThreads,
 }) {
+  const [guidanceDraft, setGuidanceDraft] = React.useState(
+    () => thread.guidance || ""
+  );
   const isScene = thread.type === "scene";
 
   const [sceneDraft, setSceneDraft] = React.useState(() =>
@@ -883,7 +887,7 @@ function ThreadManagePopup({
   };
 
   const handleSave = async () => {
-    if (!isScene) return;
+
 
     setSaving(true);
     setError("");
@@ -903,9 +907,18 @@ function ThreadManagePopup({
         instructions: sceneDraft.instructions ?? null,
       };
 
-      const updated = await setThreadScene(thread.thread_id, cleanedScene);
 
+      const patch = {
+        guidance: guidanceDraft.trim() || null,
+      };
+
+      if (isScene) {
+        patch.scene = cleanedScene;
+      }
+
+      const updated = await updateThread(thread.thread_id, patch);
       upsertThreadInState(setThreads, updated);
+
 
       // Optional: only if you distrust the returned payload or want to refresh ordering/filtering.
       // await fetchThreads?.();
@@ -926,9 +939,6 @@ function ThreadManagePopup({
           <div>
             <div className="text-lg font-semibold text-neutral-100">
               {thread.title || "(untitled scene)"}
-            </div>
-            <div className="text-xs uppercase tracking-wide text-purple-300">
-              Scene Setup
             </div>
           </div>
 
@@ -1081,31 +1091,46 @@ function ThreadManagePopup({
                 </div>
               )}
 
-              <div className="flex justify-end gap-2 border-t border-neutral-800 pt-3">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  disabled={saving}
-                  className="rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
 
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="rounded bg-purple-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-purple-500 disabled:opacity-50"
-                >
-                  {saving ? "Saving…" : "Save Setup"}
-                </button>
-              </div>
             </>
           ) : (
             <div className="text-xs text-neutral-500">
-              Ordinary thread.
+              <label className="block">
+                <div className="mb-1 text-sm font-medium text-neutral-300">
+                  Thread Guidance
+                </div>
+                <div className="mb-1 text-xs text-neutral-500">
+                  Persistent purpose, assumptions, or working agreements for this thread.
+                </div>
+                <textarea
+                  value={guidanceDraft}
+                  onChange={e => setGuidanceDraft(e.target.value)}
+                  rows={5}
+                  placeholder="What is this room for? How should your muse treat information and respond here?"
+                  className="w-full rounded border border-neutral-700 bg-neutral-900 p-2 text-sm text-neutral-100 outline-none focus:border-purple-500"
+                />
+              </label>
             </div>
           )}
+            <div className="flex justify-end gap-2 border-t border-neutral-800 pt-3">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={saving}
+                className="rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="rounded bg-purple-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-purple-500 disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save Setup"}
+              </button>
+            </div>
         </div>
       </div>
     </div>

@@ -134,6 +134,7 @@ class PromptBuilder:
         "thread_card", # For thread summarization
         "thread_summarizer_project_context", # For thread summarization
         "scene_setup_section", # For scene prompt
+        "thread_guidance_section",
         "thread_continuity", # For thread summarization and threads with summarization enabled
         "extended_history_messages",
         "scene_project_context", # For scene prompt
@@ -332,6 +333,9 @@ class PromptBuilder:
             "thread_summarizer_project_context": lambda ctx: self.build_thread_summarizer_project_context(project_id=ctx["project_id"]),
             "scene_project_context": lambda ctx: self.build_scene_project_context(project_id=ctx["project_id"]),
             "scene_setup_section": lambda ctx: self.build_scene_setup_section(thread_id=ctx["thread_id"]),
+            "thread_guidance_section": lambda ctx: self.build_thread_guidance_section(
+                thread_id=ctx["thread_id"]
+            ),
         }
 
         current_user_addon_builders = {
@@ -1847,6 +1851,31 @@ class PromptBuilder:
         full_prompt = charter + "\n\n" + "\n\n".join(layer_blocks) + instructions
 
         return {"role": "system", "text": full_prompt}
+
+    def build_thread_guidance_section(self, thread_id):
+        if not thread_id:
+            return None
+
+        thread_doc = mongo.find_one_document(
+            collection_name=MONGO_THREADS_COLLECTION,
+            query={"thread_id": thread_id},
+        )
+        guidance = str((thread_doc or {}).get("guidance") or "").strip()
+
+        if not guidance:
+            return None
+
+        return {
+            "role": "system",
+            "text": (
+                "[Thread Guidance]\n"
+                "This is a persistent room-level purpose or working agreement for "
+                "the active thread. Treat it as operating context, not as transcript "
+                "or a claim that occurred in conversation.\n\n"
+                f"{guidance}\n"
+                "[/Thread Guidance]"
+            ),
+        }
 
     def get_effective_scene_instructions(self, scene):
         ## TODO: allow scenes to override this default list

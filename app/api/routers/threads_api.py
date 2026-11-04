@@ -49,7 +49,10 @@ def create_thread(body: dict):
             "created_at": thread.get("created_at"),
             "updated_at": thread.get("updated_at"),
         }
-        mongo.insert_one_document(MONGO_MEMORY_COLLECTION, scene_facts)
+        thread_type = body.get("type") or "thread"
+        if thread_type == "scene":
+            mongo.insert_one_document(MONGO_MEMORY_COLLECTION, scene_facts)
+
 
         return {"thread": thread_response}
     except Exception as e:

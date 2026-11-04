@@ -30,7 +30,9 @@ def get_threads():
             "is_private": thread.get("is_private", False),
             "is_archived": thread.get("is_archived", False),
             "created_at": str(thread.get("created_at", None)),
-            "updated_at": str(thread.get("updated_at", None))
+            "updated_at": str(thread.get("updated_at", None)),
+            "guidance": thread.get("guidance", None),
+            "scene": thread.get("scene", None),
         }
         results.append(mapped)
     return results
@@ -99,6 +101,16 @@ def edit_thread_fields(filter_query, patch_fields):
         # Only keep non-empty, trimmed strings, limit length of each tag and total number
         cleaned_tags = [str(t)[:24].strip() for t in tags if str(t).strip()]
         updates["tags"] = cleaned_tags[:10]  # e.g., max 10 tags of max 24 chars each
+    if "guidance" in patch_fields:
+        raw_guidance = patch_fields["guidance"]
+
+        if raw_guidance is None:
+            updates["guidance"] = None
+        elif not isinstance(raw_guidance, str):
+            raise ValueError("guidance must be a string or null.")
+        else:
+            guidance = raw_guidance.strip()
+            updates["guidance"] = guidance[:4000] or None
     if "is_hidden" in patch_fields:
         is_hidden = patch_fields["is_hidden"]
         updates["is_hidden"] = is_hidden

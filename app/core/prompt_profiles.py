@@ -15,6 +15,7 @@ def build_webui_prompt(user_input, **kwargs):
             "project_list",
             "thread_continuity",
             "extended_history_messages",
+            "thread_guidance_section",
             "motd",
             "worldnow",
             "memory_layers",
