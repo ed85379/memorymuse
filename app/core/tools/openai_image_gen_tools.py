@@ -82,7 +82,7 @@ def validate_openai_source_asset(asset_doc: dict) -> Path:
     if mimetype not in SUPPORTED_OPENAI_SOURCE_MIMETYPES:
         raise ValueError(
             f"Unsupported OpenAI source image mimetype: {mimetype}. "
-            "Supported types are image/jpeg, image/png, and image/webp."
+            "Supported types are image/jpeg, image/png, image/webp, image/gif."
         )
 
     path = Path(get_asset_full_path(asset_doc))
@@ -400,8 +400,23 @@ TOOL_REGISTRY = {
                             "(`1024x1024`, `1536x1024`, `1024x1536`, `auto`)."
                         )
                     },
+                    "output_format": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": ["png", "jpeg", "webp", "gif"]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": (
+                            "Optional output format. Use `gif` only when the image should be "
+                            "an animated looping GIF; otherwise omit it to use the configured default."
+                        )
+                    },
                 },
-                "required": ["prompt", "sources", "image_size"],
+                "required": ["prompt", "sources", "image_size", "output_format"],
                 "additionalProperties": False
             },
             "strict": True
@@ -424,8 +439,23 @@ TOOL_REGISTRY = {
                         "type": "string",
                         "description": "Describe the desired image in terms of scene, pose, clothing, expression, mood, lighting, framing, composition, and action. Do not spend prompt space re-establishing your core face or identity unless a specific deviation is intended."
                     },
+                    "output_format": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": ["png", "jpeg", "webp", "gif"]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": (
+                            "Optional output format. Use `gif` only when the image should be "
+                            "an animated looping GIF; otherwise omit it to use the configured default."
+                        )
+                    },
                 },
-                "required": ["prompt"],
+                "required": ["prompt", "output_format"],
                 "additionalProperties": False
             },
             "strict": True
