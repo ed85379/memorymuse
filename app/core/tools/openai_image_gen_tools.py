@@ -19,7 +19,7 @@ MUSE_NAME = muse_settings.get_section('muse_config').get('MUSE_NAME')
 client = openai.OpenAI()
 
 
-ImageOutputFormat = Literal["png", "jpeg", "webp"]
+ImageOutputFormat = Literal["png", "jpeg", "webp", "gif"]
 ImageQuality = Literal["low", "medium", "high", "auto"]
 ImageModeration = Literal["auto", "low"]
 ImageSize = Literal["1024x1024", "1536x1024", "1024x1536", "auto"]
@@ -30,6 +30,7 @@ SUPPORTED_OPENAI_SOURCE_MIMETYPES = {
     "image/png",
     "image/jpeg",
     "image/webp",
+    "image/gif",
 }
 
 SUPPORTED_OPENAI_SOURCE_SUFFIXES = {
@@ -37,6 +38,7 @@ SUPPORTED_OPENAI_SOURCE_SUFFIXES = {
     ".jpg",
     ".jpeg",
     ".webp",
+    ".gif",
 }
 
 OPENAI_IMAGE_SOURCE_LIMIT = 16
@@ -45,8 +47,8 @@ def get_openai_image_config() -> dict:
     image_config = muse_settings.get_section("openai_image_generation") or {}
 
     return {
-        "generate_model": image_config.get("OPENAI_GENERATE_IMAGE_MODEL", "gpt-image-2.5-sunburst"),
-        "muse_model": image_config.get("OPENAI_MUSE_IMAGE_MODEL", "gpt-image-2.5-sunburst"),
+        "generate_model": image_config.get("OPENAI_GENERATE_IMAGE_MODEL", "gpt-image-2.6-sunburst"),
+        "muse_model": image_config.get("OPENAI_MUSE_IMAGE_MODEL", "gpt-image-2.6-sunburst"),
         "default_image_size": image_config.get("OPENAI_IMAGE_SIZE", "auto"),
         "default_output_format": image_config.get("OPENAI_IMAGE_OUTPUT_FORMAT", "png"),
         "default_quality": image_config.get("OPENAI_IMAGE_QUALITY", "medium"),
@@ -440,3 +442,4 @@ def register_tools(registry):
     for name, handler in TOOL_REGISTRY.items():
         print(f"Registering Image Gen Tool: {name}")
         registry.register(name, handler)
+
