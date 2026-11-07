@@ -629,47 +629,23 @@ async def get_orchestrated_openai_response(
 ):
     from app.services.llm.openai_responses_adapter import OpenAIResponsesAdapter
     from app.services.llm.orchestrator import get_model_response
-    async def legacy_webui_status(
-        event: str,
-        function_name: str | None,
-        status_ui_meta: dict | None,
-    ) -> None:
-        if prompt_type != "webui":
-            return
+    from app.services.llm.registry import resolve_adapter
+    from app.core.conversation.status_sinks import resolve_status_sink
 
-        timestamp = datetime.now(timezone.utc).isoformat()
-        muse_name = muse_settings.get_section("muse_config").get("MUSE_NAME")
+    muse_name = muse_settings.get_section("muse_config").get("MUSE_NAME")
 
-        if event == "thinking":
-            message = f"{muse_name} is thinking..."
-
-        elif event == "tool_start":
-            message = (
-                (status_ui_meta or {})
-                .get(function_name or "", {})
-                .get("start", f"Running {function_name}...")
-            )
-
-        elif event == "tool_error":
-            message = (
-                (status_ui_meta or {})
-                .get(function_name or "", {})
-                .get("error", f"Error running {function_name}")
-            )
-
-        else:
-            return
-
-        await broadcast_message(
-            message=message,
-            timestamp=timestamp,
-            role="muse",
-            to_modality="webui",
-            payload_type="status_message",
-        )
+    status_callback = resolve_status_sink(
+        prompt_type=prompt_type,
+        muse_name=muse_name,
+        broadcast_message=broadcast_message,
+    )
 
     return await get_model_response(
-        adapter=OpenAIResponsesAdapter(client),
+        adapter=resolve_adapter(
+            provider="openai",
+            transport="responses",
+            client=client,
+        ),
         dev_prompt=dev_prompt,
         user_assistant_messages=user_assistant_messages,
         prompt_type=prompt_type,
@@ -679,7 +655,7 @@ async def get_orchestrated_openai_response(
         tool_choice=tool_choice,
         ui_meta=ui_meta,
         max_tool_turns=max_tool_turns,
-        status_callback=legacy_webui_status,
+        status_callback=status_callback,
     )
 
 ## The autotags were experimental. I don't think we need them anymore.
