@@ -731,6 +731,7 @@ export default function ChatPage() {
                 upsertMessage(prev, incoming),
                 windowLimitFor(prev)
               );
+              setScrollToMessageId(message_id);
               return updated;
             });
 

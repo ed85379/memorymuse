@@ -307,10 +307,6 @@ const ChatTab = (
     });
 
     // 2. Add to UI state immediately (so it’s taggable, traceable, etc.)//
-    const messageWindowLimit = atBottom
-      ? ACTIVE_WINDOW_LIMIT
-      : SCROLLBACK_LIMIT;
-
     setMessages(prev =>
       trimMessages([
         ...prev,
@@ -589,30 +585,37 @@ const ChatTab = (
   const statusCount = Array.isArray(status) ? status.length : 0;
 
   useEffect(() => {
-    if (atBottom) {
+    // A newly arrived assistant message gets its own, nicer
+    // “start reading here” scroll behavior below.
+    if (atBottom && !scrollToMessageId) {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [lastVisibleId, statusCount, atBottom]);
+  }, [lastVisibleId, statusCount, atBottom, scrollToMessageId]);
 
 
-  useEffect(() => {
-    if (
-      scrollToMessageId &&
-      scrollContainerRef.current &&
-      messageRefs.current[scrollToMessageId]?.current
-    ) {
-      const container = scrollContainerRef.current;
-      const messageEl = messageRefs.current[scrollToMessageId].current;
+useEffect(() => {
+    if (!scrollToMessageId) return;
 
-      const offsetTop = messageEl.offsetTop - container.offsetTop;
-      container.scrollTo({
-        top: offsetTop,
-        behavior: "smooth",
-      });
-
+    // The message arrived while Ed was reading history.
+    // Consume the target so it cannot fire later when he returns to bottom.
+    if (!atBottom) {
       setScrollToMessageId(null);
+      return;
     }
-  }, [scrollToMessageId, visibleMessages]);
+
+    const container = scrollContainerRef.current;
+    const messageEl = messageRefs.current[scrollToMessageId]?.current;
+
+    if (!container || !messageEl) return;
+
+    container.scrollTo({
+      top: messageEl.offsetTop - container.offsetTop,
+      behavior: "smooth",
+    });
+
+    setScrollToMessageId(null);
+  }, [scrollToMessageId, visibleMessages, atBottom, setScrollToMessageId]);
+
   // ------------------------------------
   // End - Chat and Formatting
   // ------------------------------------
