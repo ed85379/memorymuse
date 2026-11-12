@@ -663,6 +663,13 @@ export default function ChatPage() {
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const ACTIVE_WINDOW_LIMIT = 10;
+  const SCROLLBACK_LIMIT = 30;
+
+  function windowLimitFor(existing) {
+    return existing.length > ACTIVE_WINDOW_LIMIT
+      ? SCROLLBACK_LIMIT
+      : ACTIVE_WINDOW_LIMIT;
+  }
 
   function upsertMessage(existing, incoming) {
     const index = existing.findIndex(m => m.message_id === incoming.message_id);
@@ -722,9 +729,8 @@ export default function ChatPage() {
             setMessages(prev => {
               const updated = trimMessages(
                 upsertMessage(prev, incoming),
-                ACTIVE_WINDOW_LIMIT
+                windowLimitFor(prev)
               );
-              setScrollToMessageId(message_id);
               return updated;
             });
 
@@ -732,7 +738,7 @@ export default function ChatPage() {
               setThreadMessages(prev => {
                 const updated = trimMessages(
                   upsertMessage(prev, incoming),
-                  ACTIVE_WINDOW_LIMIT
+                  windowLimitFor(prev)
                 );
                 return updated;
               });
@@ -778,7 +784,7 @@ export default function ChatPage() {
             setMessages(prev => {
               const updated = trimMessages(
                 upsertMessage(prev, incoming),
-                ACTIVE_WINDOW_LIMIT
+                windowLimitFor(prev)
               );
 
               return updated;
@@ -788,7 +794,7 @@ export default function ChatPage() {
               setThreadMessages(prev => {
                 const updated = trimMessages(
                   upsertMessage(prev, incoming),
-                  ACTIVE_WINDOW_LIMIT
+                  windowLimitFor(prev)
                 );
                 return updated;
               });

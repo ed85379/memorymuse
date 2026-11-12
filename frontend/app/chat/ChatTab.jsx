@@ -307,6 +307,10 @@ const ChatTab = (
     });
 
     // 2. Add to UI state immediately (so it’s taggable, traceable, etc.)//
+    const messageWindowLimit = atBottom
+      ? ACTIVE_WINDOW_LIMIT
+      : SCROLLBACK_LIMIT;
+
     setMessages(prev =>
       trimMessages([
         ...prev,
@@ -321,15 +325,13 @@ const ChatTab = (
           thread_ids: [threadId],
           metadata: {
             assets: optimisticAssets,
-
-            ...(activeGameId
-              ? { game_id: activeGameId }
-              : {}),
-
+            ...(activeGameId ? { game_id: activeGameId } : {}),
             ...optimisticTurnActionMetadata,
-          }
+          },
         }
-      ], ACTIVE_WINDOW_LIMIT)
+      ], prev.length > ACTIVE_WINDOW_LIMIT
+        ? SCROLLBACK_LIMIT
+        : ACTIVE_WINDOW_LIMIT)
     );
       if (threadId) {
         setThreadMessages(prev =>
@@ -346,22 +348,19 @@ const ChatTab = (
               thread_ids: [threadId],
               metadata: {
                 assets: optimisticAssets,
-
-                ...(activeGameId
-                  ? { game_id: activeGameId }
-                  : {}),
-
+                ...(activeGameId ? { game_id: activeGameId } : {}),
                 ...optimisticTurnActionMetadata,
-              }
+              },
             }
-          ], ACTIVE_WINDOW_LIMIT)
+          ], prev.length > ACTIVE_WINDOW_LIMIT
+            ? SCROLLBACK_LIMIT
+            : ACTIVE_WINDOW_LIMIT)
         );
       }
 
     setStatus(["Sending message..."]);
     setInput("");
     setThinking(true);
-    //setScrollToBottom(true);
 
     // 3. Send the message to the backend, including timestamp
     await fetch("/api/muse/talk", {
@@ -401,7 +400,6 @@ const ChatTab = (
   const [input, setInput] = useState("");
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [scrollToBottom, setScrollToBottom] = useState(true);
   const [scrollTargetNode, setScrollTargetNode] = useState(null);
   const [atBottom, setAtBottom] = useState(true);
   const chatEndRef = useRef(null);
@@ -536,7 +534,6 @@ const ChatTab = (
         );
       }
 
-      setScrollToBottom(false); // Don't scroll when loading history
 
       // After next render, restore the scroll position so the previous top message stays in place
       setTimeout(() => {
@@ -559,8 +556,6 @@ const ChatTab = (
         setMessages(trimMessages(data.messages, ACTIVE_WINDOW_LIMIT));
       }
 
-      // If you want auto-scroll on fresh loads, you can re‑enable this:
-       setScrollToBottom(true);
     }
 
     if (data.messages.length === SCROLLBACK_LIMIT) {
@@ -597,7 +592,7 @@ const ChatTab = (
     if (atBottom) {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [lastVisibleId, statusCount, scrollToBottom]);
+  }, [lastVisibleId, statusCount, atBottom]);
 
 
   useEffect(() => {
