@@ -594,7 +594,7 @@ const ChatTab = (
   const statusCount = Array.isArray(status) ? status.length : 0;
 
   useEffect(() => {
-    if (scrollToBottom) {
+    if (atBottom) {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [lastVisibleId, statusCount, scrollToBottom]);
@@ -923,6 +923,7 @@ const ChatTab = (
         <button
           type="button"
           onClick={() => {
+            setAtBottom(true);
             chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
           }}
           className="
@@ -943,12 +944,9 @@ const ChatTab = (
           className="mt-4 flex-1 min-h-0 overflow-y-auto relative pt-12"
           onScroll={async (e) => {
             const { scrollTop, scrollHeight, clientHeight } = e.target;
+            const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10;
 
-            if (scrollTop + clientHeight >= scrollHeight - 10) {
-              setAtBottom(true);
-            } else {
-              setAtBottom(false);
-            }
+            setAtBottom(isAtBottom);
 
             if (scrollTop === 0) {
               await handleLoadMore();
